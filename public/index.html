@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TBH-like 挂机英雄</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 选择角色 -->
+<div id="login" class="modal-mask">
+  <div class="modal char-modal">
+    <h2>选择你的角色</h2>
+    <p class="muted small">首次进入会自动创建存档；之后再打开会自动读回存档。</p>
+    <div class="char-list" id="char-list"></div>
+    <div class="card">
+      <div class="row"><label style="width:64px">名字</label>
+        <input type="text" id="lg-name" placeholder="冒险者" style="flex:1"></div>
+      <div class="row" style="margin-top:8px"><label style="width:64px">存档令牌</label>
+        <input type="text" id="lg-token" placeholder="留空 = 新开档" style="flex:1"></div>
+    </div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="primary" id="lg-go">进入游戏</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app" style="display:none">
+
+  <div class="topbar">
+    <span class="brand">⚔ TBH-like</span>
+    <span class="stat gold">💰 <b id="t-gold">0</b></span>
+    <span class="stat">⚔ DPS <b id="t-dps">0</b></span>
+    <span class="stat">🛡 EHP <b id="t-ehp">0</b></span>
+    <span class="stat" id="t-chest-wrap">📦 <b id="t-chest">0</b></span>
+    <select id="t-diff"></select>
+    <button id="t-start" class="primary">开始挂机</button>
+    <span class="stat small muted" id="t-status">未连接</span>
+    <span style="flex:1"></span>
+    <span class="small muted" id="t-name"></span>
+    <button class="sm" id="t-gm">GM 面板</button>
+  </div>
+
+  <div class="main">
+    <!-- 战斗区 -->
+    <div class="battle-pane">
+      <div id="banners"></div>
+
+      <div class="stage-hud">
+        <div>
+          <b id="b-stage">1-1</b>
+          <span class="muted small" id="b-wave">未开始</span>
+        </div>
+        <div class="row">
+          <label class="tiny muted">自动重试</label><input type="checkbox" id="b-retry" checked>
+          <label class="tiny muted">自动推进</label><input type="checkbox" id="b-advance" checked>
+          <button class="sm" id="b-openall">开宝箱</button>
+        </div>
+      </div>
+
+      <!-- 横向卷轴战场 -->
+      <div class="stage-view" id="stage-view">
+        <div class="stage-parallax"></div>
+        <div class="stage-ground"></div>
+        <div class="stage-layer" id="layer-foes"></div>
+        <div class="stage-layer" id="layer-heroes"></div>
+        <div class="stage-layer drops" id="layer-drops"></div>
+        <div class="stage-layer fx" id="layer-fx"></div>
+        <div class="stage-hint" id="stage-hint">点右上角「开始挂机」，小队就会出发</div>
+      </div>
+
+      <div class="hero-grid" id="b-heroes"></div>
+      <div class="small muted" id="b-summary"></div>
+
+      <div class="card">
+        <h3>战斗日志</h3>
+        <div class="log" id="b-log"></div>
+      </div>
+    </div>
+
+    <!-- 侧栏 -->
+    <div class="side-pane">
+      <div class="tabs" id="tabs">
+        <div class="tab active" data-tab="party">阵容</div>
+        <div class="tab" data-tab="bag">背包</div>
+        <div class="tab" data-tab="cube">魔方</div>
+        <div class="tab" data-tab="runes">符文</div>
+        <div class="tab" data-tab="stages">关卡</div>
+        <div class="tab" data-tab="pets">宠物</div>
+        <div class="tab" data-tab="ach">成就</div>
+      </div>
+      <div class="tab-content" id="tab-content"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="modal-root"></div>
+
+<script src="js/net.js"></script>
+<script src="js/gear-ui.js"></script>
+<script src="js/stage.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

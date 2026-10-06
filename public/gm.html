@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GM 控制台 — TBH-like</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="login" class="modal-mask">
+  <div class="modal" style="width:400px">
+    <h2>GM 控制台</h2>
+    <div class="card">
+      <div class="row"><label style="width:60px">令牌</label>
+        <input type="text" id="gm-token" style="flex:1" placeholder="服务器启动时打印的 GM 令牌"></div>
+      <div class="tiny muted" style="margin-top:6px">令牌保存在 data/server.json，也可用环境变量 GM_TOKEN 覆盖。</div>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button class="primary" id="gm-go">登录</button>
+    </div>
+  </div>
+</div>
+
+<div class="gm-wrap" id="wrap" style="display:none">
+  <div class="topbar" style="border-radius:10px;margin-bottom:12px">
+    <span class="brand">🛠 GM 控制台</span>
+    <span class="stat small muted" id="g-status">未连接</span>
+    <span class="stat small" id="g-count">玩家 0</span>
+    <span style="flex:1"></span>
+    <button class="sm" onclick="location.href='index.html'">返回游戏</button>
+  </div>
+
+  <div id="g-alerts"></div>
+
+  <div class="gm-grid">
+    <!-- 玩家 -->
+    <div class="card">
+      <h3>玩家</h3>
+      <div id="g-players"></div>
+      <div class="tiny muted" id="g-sel">未选择玩家</div>
+    </div>
+
+    <!-- 发放 -->
+    <div class="card">
+      <h3>发放</h3>
+      <div class="row">
+        <input type="number" id="gv-gold" placeholder="金币" style="width:110px">
+        <button class="sm good" onclick="G.grant({gold:Number(document.getElementById('gv-gold').value)})">发金币</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <input type="number" id="gv-exp" placeholder="经验" style="width:110px">
+        <button class="sm good" onclick="G.grant({exp:Number(document.getElementById('gv-exp').value)})">发经验</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <input type="number" id="gv-lv" placeholder="等级数" style="width:110px">
+        <button class="sm good" onclick="G.grant({levels:Number(document.getElementById('gv-lv').value)})">升 N 级</button>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:8px 0">
+      <div class="row">
+        <select id="gv-rarity"></select>
+        <select id="gv-slot"></select>
+        <select id="gv-class"></select>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <input type="number" id="gv-ilvl" value="40" placeholder="等级" style="width:80px">
+        <input type="number" id="gv-icount" value="1" placeholder="件数" style="width:70px">
+        <button class="sm good" onclick="G.grantItem()">发装备</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <select id="gv-mat"></select>
+        <input type="number" id="gv-matn" value="1" style="width:60px">
+        <button class="sm" onclick="G.grant({material:{id:document.getElementById('gv-mat').value,count:Number(document.getElementById('gv-matn').value)}})">发素材</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <select id="gv-chest">
+          <option value="normal">普通宝箱</option><option value="boss">首领宝箱</option><option value="actBoss">幕末宝箱</option>
+        </select>
+        <input type="number" id="gv-chestn" value="1" style="width:60px">
+        <button class="sm" onclick="G.grant({chest:{type:document.getElementById('gv-chest').value,count:Number(document.getElementById('gv-chestn').value)}})">发宝箱</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <select id="gv-pet"></select>
+        <button class="sm" onclick="G.grant({pet:document.getElementById('gv-pet').value})">解锁宠物</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <select id="gv-rune"></select>
+        <button class="sm" onclick="G.grant({rune:document.getElementById('gv-rune').value})">点亮符文</button>
+      </div>
+    </div>
+
+    <!-- 回收 / 管理 -->
+    <div class="card">
+      <h3>回收与管控</h3>
+      <div class="row">
+        <input type="number" id="gv-take" placeholder="扣金币" style="width:110px">
+        <button class="sm danger" onclick="G.take({gold:Number(document.getElementById('gv-take').value)})">扣金币</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <button class="sm danger" onclick="G.take({clearInventory:true})">清空背包</button>
+        <button class="sm danger" onclick="G.take({resetLevel:true})">等级归 1</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <input type="text" id="gv-rename" placeholder="新名字" style="width:130px">
+        <button class="sm" onclick="G.rename()">改名</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <input type="text" id="gv-kickreason" placeholder="踢出原因" style="width:150px">
+        <button class="sm danger" onclick="G.kick()">踢下线</button>
+      </div>
+      <div class="row" style="margin-top:5px">
+        <button class="sm danger" onclick="G.reset()">⚠ 重置该存档</button>
+      </div>
+    </div>
+
+    <!-- 事件 -->
+    <div class="card">
+      <h3>世界事件</h3>
+      <div id="g-events"></div>
+      <hr style="border:none;border-top:1px solid var(--line);margin:8px 0">
+      <div class="row">
+        <select id="gv-event"></select>
+        <input type="number" id="gv-evdur" placeholder="秒" style="width:80px">
+        <button class="sm primary" onclick="G.startEvent()">启动</button>
+        <button class="sm danger" onclick="G.stopEvent()">全部停止</button>
+      </div>
+    </div>
+
+    <!-- 公告 -->
+    <div class="card">
+      <h3>公告</h3>
+      <div class="row">
+        <input type="text" id="gv-ann" placeholder="全服公告内容" style="flex:1">
+        <button class="sm primary" onclick="G.announce()">广播</button>
+      </div>
+      <div id="g-anns" class="tiny muted" style="margin-top:6px"></div>
+    </div>
+
+    <!-- 调参 -->
+    <div class="card" style="grid-column:1/-1">
+      <h3>实时调参 <span class="tiny muted">（改完立即对所有在线玩家生效，保存在数据库）</span></h3>
+      <div class="row" style="margin-bottom:8px">
+        <input type="text" id="gv-search" placeholder="搜索参数名…" style="width:200px" oninput="G.renderTunables()">
+        <button class="sm" onclick="G.resetAllTunables()">全部恢复默认</button>
+        <span class="tiny muted" id="g-tunable-count"></span>
+      </div>
+      <div id="g-tunables" style="columns:2;column-gap:18px"></div>
+    </div>
+
+    <!-- 审计 -->
+    <div class="card" style="grid-column:1/-1">
+      <h3>操作日志</h3>
+      <div id="g-audit" class="small" style="max-height:220px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/net.js"></script>
+<script src="js/gm.js"></script>
+</body>
+</html>

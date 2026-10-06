@@ -1,0 +1,24 @@
+{
+  "name": "tbh-like",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A self-hosted, GM-driven idle RPG inspired by TBH: Task Bar Hero. Node + WebSocket + SQLite.",
+  "type": "commonjs",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "seed": "node scripts/seed.js",
+    "test": "node engine/test.cjs",
+    "reset": "node scripts/reset.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.5.0"
+  }
+}

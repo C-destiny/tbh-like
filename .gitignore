@@ -1,0 +1,13 @@
+# 依赖与运行数据不入库
+node_modules/
+data/
+!data/.gitkeep
+
+# 素材原图入库：体积小（4 张），且 scripts/prep-assets.cjs 需要它们才能重跑抠图。
+# 抠图产物 public/assets/ 同样入库，保证仓库可离线复现前端。
+
+# 工具与运行时杂项
+.workbuddy/
+*.log
+.DS_Store
+Thumbs.db
