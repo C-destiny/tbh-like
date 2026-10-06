@@ -112,7 +112,8 @@ node scripts/ui-smoke.cjs
 
 node server/index.js（后台启动，端口 8787）
   -> curl http://127.0.0.1:8787/ 返回 HTTP 200
-  -> 启动日志含「TBH-like 服务器已启动」「GM 令牌: <令牌值见 data/server.json，已 gitignore>」
+  -> 启动日志含「TBH-like 服务器已启动」与「GM 面板: http://localhost:8787/gm.html」
+  -> 令牌值查 data/server.json（该文件已 gitignore，不入库）
 
 node scripts/e2e.cjs
   -> 退出码 0，末行「✅ 全部通过」

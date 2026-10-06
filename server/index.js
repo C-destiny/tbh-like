@@ -364,7 +364,8 @@ server.listen(PORT, HOST, () => {
   console.log(`  本机:   http://localhost:${PORT}`);
   addrs.forEach(a => console.log(`  局域网: http://${a}:${PORT}   (手机同 WiFi 可访问)`));
   console.log(`  GM 面板: http://localhost:${PORT}/gm.html`);
-  console.log(`  GM 令牌: ${GM_TOKEN}`);
+  // 刻意不打印令牌明文：启动日志常被贴进交接文档或 issue，token 会被带进 git 历史
+  console.log(`  GM 令牌: 见 ${SERVER_CFG_PATH}`);
   console.log('');
 });
 
