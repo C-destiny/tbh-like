@@ -1,7 +1,12 @@
 /**
  * 平衡性模拟：模拟一个"会玩"的玩家挂机 N 小时
- *   node scripts/balance.cjs [hours]
+ *   node scripts/balance.cjs [hours] [seed]
  * 行为：自动开箱、自动穿更强装备、优先买最便宜符文、攒钱招募第二英雄
+ *
+ * 【为什么必须固定 seed】createNewSave 默认用 Math.random() 生成种子，
+ * 不传 seed 时每次跑的掉落/升级曲线都不同，两次输出无法对比，
+ * 「改动前后曲线对比」就失去意义（见 AGENTS.md 4.1 / 4.3）。
+ * 所以这里默认用固定种子；要采另一条样本线用第二个参数换种子。
  */
 const { createNewSave, Player } = require('../engine/game');
 const { itemPower } = require('../engine/gear');
@@ -9,6 +14,8 @@ const { cheapestBuyable } = require('../engine/rune');
 
 const HOURS = Number(process.argv[2] || 4);
 const SECONDS = HOURS * 3600;
+// 固定默认种子 20260101：所有阶段共用同一条随机流，才能做前后对比
+const SEED = Number(process.argv[3] || 20260101);
 
 function autoPlay(p) {
   const st = p.state;
@@ -63,10 +70,11 @@ function autoPlay(p) {
   }
 }
 
-const p = new Player(createNewSave({ name: '模拟玩家', classId: 'niuma' }));
+// seed 固定，保证同一条随机流：两次运行结果必须逐字节可对比
+const p = new Player(createNewSave({ name: '模拟玩家', classId: 'niuma', seed: SEED }));
 p.act('start');
 
-console.log(`\n模拟 ${HOURS} 小时挂机...\n`);
+console.log(`\n模拟 ${HOURS} 小时挂机...（seed=${SEED}）\n`);
 console.log('  时间   等级  关卡   金币      击杀    装备  符文  成就');
 for (let s = 1; s <= SECONDS; s++) {
   p.tick(1);
