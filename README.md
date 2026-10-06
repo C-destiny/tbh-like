@@ -8,6 +8,11 @@
 英雄自动战斗 → 推关掉宝箱 → 开箱拿装备 → 魔方改造 → 符文树长期成长 → 离线收益
 ```
 
+> **用 AI（WorkBuddy / Claude Code / Cursor 等）接着开发的话**：
+> 先读 [`AGENTS.md`](AGENTS.md)（强制工作流规范：交接文档、编码规范、版本控制、维护约束）
+> 和 [`HANDOFF.md`](HANDOFF.md)（上一次做了什么、架构决策、没做什么、已知坑）。
+> `AGENTS.md` 要求每个阶段结束必须更新 `HANDOFF.md` 并提交一次 commit，缺一不算交付。
+
 ---
 
 ## 一、跑起来
@@ -23,8 +28,12 @@ npm start            # 默认 8787 端口
 本机:   http://localhost:8787
 局域网: http://192.168.1.x:8787   (手机同 WiFi 可访问)
 GM 面板: http://localhost:8787/gm.html
-GM 令牌: gm_xxxxxxxx
+GM 令牌: 见 data/server.json
 ```
+
+> GM 令牌首次启动时自动生成并写入 `data/server.json`（该文件不会提交到 Git）。
+> 登录 GM 面板时从该文件复制，或直接设置 `GM_TOKEN` 环境变量覆盖。
+> 启动日志刻意不打印令牌明文，避免日志被贴进文档或 issue 时泄漏。
 
 - 玩家打开 `http://localhost:8787` → 填名字、选职业 → 进游戏
 - GM 打开 `http://localhost:8787/gm.html` → 填令牌 → 进控制台
@@ -36,13 +45,42 @@ GM 令牌: gm_xxxxxxxx
 |---|---|
 | `npm start` | 启动服务器 |
 | `npm run dev` | 改动自动重启 |
-| `npm test` | 引擎冒烟测试（不开服务器） |
-| `node scripts/e2e.cjs` | 端到端测试（需先启动服务器） |
-| `node scripts/balance.cjs 6` | 模拟 6 小时挂机，看数值曲线 |
-| `node scripts/reset.js` | 清空所有玩家存档 |
+| `npm test` | 引擎 + 前端测试（不开服务器） |
+| `npm run test:engine` | 只跑引擎冒烟（`scripts/smoke.cjs`） |
+| `npm run test:ui` | 只跑前端逻辑（`scripts/ui-smoke.cjs`，DOM 桩，不需要浏览器） |
+| `npm run test:e2e` | 端到端测试（**需先 `npm start`**） |
+| `npm run balance -- 6` | 模拟 6 小时挂机，看数值曲线 |
+| `npm run assets` | 重新抠图：原始素材 → `public/assets/heroes/` |
+| `npm run reset` | 清空所有玩家存档 |
 | `node scripts/reset.js --all` | 连 GM 令牌、调参、日志一起清空 |
 
 环境变量：`PORT`（端口）、`HOST`（绑定地址）、`GM_TOKEN`（覆盖 GM 令牌）。
+
+---
+
+## 一之二、在另一台电脑上继续开发
+
+```bash
+git clone https://github.com/C-destiny/tbh-like.git
+cd tbh-like
+npm install
+npm test          # 确认环境正常（应全绿）
+npm start
+```
+
+需要先在 GitHub 上登录才能 clone（该仓库是私有的）。推荐配好 SSH key，
+之后 `git pull` / `git push` 就不需要反复登录。
+
+换机器的注意事项：
+
+- **存档不跟着仓库走**。`data/` 整个目录被 gitignore（`game.db` 存玩家存档、
+  `server.json` 存 GM 令牌）。新电脑上首次启动会生成一个全新的空存档，
+  GM 令牌也会重新生成。想把老存档带过去，手动复制 `data/game.db` 即可
+  （停服后复制，用 SQLite 工具或直接拷文件都行）。
+- **服务器地址会变**。启动日志里打印的局域网 IP 是按当前网卡算出来的，换机器必然不同。
+- **依赖只有 2 个**：`ws`（必需）和 `better-sqlite3`（可选，装不上会自动退回 JSON 文件存储，
+  功能不变）。所以 `npm install` 在任何 Node 20+ 上都能成功。
+- **素材已入库**，不���再单独处理图片。`npm run assets` 可以在素材更新后重新抠图。
 
 ---
 
@@ -73,7 +111,7 @@ GM 面板底部「实时调参」列出 **67 个可热改数值**，改完回车
 
 | 系统 | 说明 |
 |---|---|
-| **阵容** | 6 职业（骑士/游侠/牧师/术士/杀手/猎人），前中后排站位影响承伤与输出。初始 2 槽，符文树可开到 4 槽 |
+| **阵容** | 2 个角色（肾虚牛马 / 肉蛋葱击使者），前中后排站位影响承伤与输出。初始 2 槽，符文树可开到 4 槽。用金币可招募更多成员 |
 | **战斗** | 服务器每 1 秒推进一次，5~7 波怪物 + Boss 波。英雄会自动攻击、吸血、治疗、复活 |
 | **关卡** | 3 幕 × 10 关 × 4 难度（普通/困难/专家/地狱），共 120 个关卡。通关自动推进，可回头刷已通关卡 |
 | **掉落** | 10 档稀有度：普通 → 宇宙。波次掉普通箱，关底掉首领箱，幕末掉幕末箱 |
@@ -157,8 +195,8 @@ server/
   db.js          SQLite 持久化（玩家存档/调参/公告/事件/审计）
   gm.js          GM 指令集
 engine/          纯逻辑，不依赖服务器，可单独跑测试
-  data/          所有游戏内容（职业/怪物/关卡/装备/符文/宠物/成就/数值）
-  combat.js      战斗推进
+  data/          所有游戏内容（角色/怪物/关卡/装备/符文/宠物/成就/数值）
+  combat.js      战斗推进 + 掉落流水
   hero.js        属性计算
   gear.js        装备生成 + 魔方六种操作
   loot.js        掉落与宝箱
@@ -168,9 +206,38 @@ engine/          纯逻辑，不依赖服务器，可单独跑测试
   tunables.js    数值热改层（config + DB 覆盖）
   game.js        顶层门面：tick / 指令 / 视图快照
 public/          前端（原生 JS，无构建步骤）
+  index.html     登录 + 战场 + 侧栏单页
+  js/stage.js    横向卷轴战场（推进/入场/互砍/掉落播放）
+  js/gear-ui.js  装备图标（SVG）+ 角色立绘穿戴展示
+  js/app.js      页签渲染与指令发送
+  js/net.js      WebSocket 封装
+  js/gm.js       GM 控制台
+  assets/heroes/ 抠图产物：立绘 + 走路 4 帧
+assets-src/heroes/ 角色原始素材（深色纯底图）
 scripts/         测试与维护脚本
-data/            运行时数据库（game.db）与 GM 令牌
+  smoke.cjs      引擎冒烟
+  ui-smoke.cjs   前端逻辑（DOM 桩，不需浏览器）
+  e2e.cjs        端到端（需先启动服务器）
+  balance.cjs    平衡模拟，固定随机种子
+  prep-assets.cjs 抠图：原图 → 去背 → 切 4 帧 → 统一画布
+  reset.js       清档
+data/            运行时数据库（game.db）与 GM 令牌（已 gitignore）
 ```
+
+### 4.7 角色素材管线
+
+两个角色的图都来自 `assets-src/heroes/`，各两张：`*_full.png`（全身立绘）与
+`*_walk.png`（走路 4 帧横排）。`npm run assets` 会：
+
+1. 边缘 flood fill 去背景，产出透明底 PNG
+2. 把走路表切成 4 张独立帧
+3. 逐帧去残片 + trim + 统一到最大宽高并底对齐（避免播放时人物抖动）
+
+产物落在 `public/assets/heroes/`，前端直接引用。
+
+**加新角色**需要：往 `engine/data/classes.js` 的 `CLASSES` 加一项、`CLASS_ORDER` 加 id，
+再按上面的命名把两张原图放进 `assets-src/heroes/`，然后跑 `npm run assets`。
+抠图阈值很敏感（见 `HANDOFF.md` 第 4 节的已知问题），换素材后务必目视检查全部产物。
 
 ---
 

@@ -8,8 +8,12 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "seed": "node scripts/seed.js",
-    "test": "node engine/test.cjs",
+    "test": "node scripts/smoke.cjs && node scripts/ui-smoke.cjs",
+    "test:engine": "node scripts/smoke.cjs",
+    "test:ui": "node scripts/ui-smoke.cjs",
+    "test:e2e": "node scripts/e2e.cjs",
+    "balance": "node scripts/balance.cjs",
+    "assets": "node scripts/prep-assets.cjs",
     "reset": "node scripts/reset.js"
   },
   "engines": {

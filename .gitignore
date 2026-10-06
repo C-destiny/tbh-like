@@ -1,10 +1,14 @@
-# 依赖与运行数据不入库
+# 依赖不入库
 node_modules/
-data/
-!data/.gitkeep
 
-# 素材原图入库：体积小（4 张），且 scripts/prep-assets.cjs 需要它们才能重跑抠图。
-# 抠图产物 public/assets/ 同样入库，保证仓库可离线复现前端。
+# 运行时数据不入库：只排除仓库根的 data/（游戏存档 game.db + GM 令牌 server.json）。
+# 必须写成 /data/ ！写成 data/ 会匹配任意层级的同名目录，
+# 曾把 engine/data/（全部游戏内容：角色/怪物/装备/符文/数值）一起排除掉，
+# 导致 clone 下来的仓库直接 Cannot find module './data/classes'。
+/data/
+
+# 素材原图与抠图产物都入库：assets-src/ 是抠图输入，
+# public/assets/heroes/ 是产物，别人 clone 后能直接跑 npm run assets 重现。
 
 # 工具与运行时杂项
 .workbuddy/

@@ -5,6 +5,33 @@
 
 ## 1. 已完成内容
 
+### 阶段 2：让「换一台电脑继续开发」真正可行
+
+用户问「换一台电脑能不能直接从 GitHub 下载继续做」。为了回答这个问题，
+实际做了一次干净克隆验证 —— **结果发现两个致命问题，本阶段修复。**
+
+| 产出 | 路径 | 行为变化 | 验证方式 |
+| --- | --- | --- | --- |
+| 修复 `.gitignore` 误排除 | `.gitignore` | `data/` 改为 `/data/`。原来没有前导斜杠，匹配任意层级的 `data` 目录，把 `engine/data/`（全部游戏内容）一并排除，根本没进仓库 | `git check-ignore -v`：`data/game.db` 被排除、`engine/data/classes.js` 未被排除 |
+| 补齐游戏数据入库 | `engine/data/*.js`（6 个文件） | 角色、怪物、装备、符文、宠物、成就与全部数值首次入库 | 干净克隆后 `git ls-files \| grep engine/data` = 6 |
+| 修复坏脚本入口 | `package.json` | `test` 原指向不存在的 `engine/test.cjs`，`seed` 原指向不存在的 `scripts/seed.js`。改为 `smoke.cjs && ui-smoke.cjs`，删除 seed，补 `test:engine`/`test:ui`/`test:e2e`/`balance`/`assets` | 逐个验证 9 个脚本目标文件全部存在 |
+| 修读过时说明 | `README.md` | 「6 职业」改为「2 个角色」；启动日志说明改为指向 `data/server.json`；新增「在另一台电脑上继续开发」章节；目录结构补全 `stage.js`/`gear-ui.js`/`assets-src` 等；新增 4.7 角色素材管线 | 文中引用的每个文件与命令均已核对存在 |
+| 标注 AI 入口 | `README.md` | 开头提示接手的 Agent 先读 `AGENTS.md` 与 `HANDOFF.md` | 两个文件均在仓库根目录 |
+
+**干净克隆验证（本阶段实际执行）**
+
+```
+git clone E:/tbh-like E:\tbh-fresh     # exit 0
+  -> 修复前：49 个文件，engine/data/ 整个目录不存在
+     node scripts/smoke.cjs -> Error: Cannot find module './data/classes'
+  -> 修复后：55 个文件，engine/data/ 6 个文件齐全
+     素材：public/assets/heroes 10 张、assets-src/heroes 4 张（与原机器一致）
+     data/ 未克隆（正确）、node_modules 未克隆（正确）
+```
+
+原机器上完全看不出这个问题 —— 缺失的文件还在自己磁盘上。只有真正克隆到干净目录
+才能暴露。这也是本阶段最重要的一条经验，已写入第 4 节 4.7。
+
 ### 阶段 1：战场掉落改为服务器真实流水
 
 用户要求「死亡后掉落相应的物品」。改造前的 `stage.js` 的 `dropLoot()` 是纯随机装饰：
@@ -247,4 +274,37 @@ node scripts/e2e.cjs
 - **复现条件**：改了 `public/css/style.css` 的 keyframes 后只跑 `ui-smoke.cjs`。
 - **影响范围**：所有视觉表现。脚本用 DOM 桩，`animationend` 不真实触发，动画错位测不出来。
 - **规避手段**：改 CSS 动画后必须打开 `http://localhost:8787` 目视验证至少一个完整的「推进 → 互砍 → 掉落」循环。
-- **已登记跟踪**：是，待接入无头浏览器（`agent-browser` 技能）做截图回归。
+- **已登记跟踪**：是，`agent-browser` 已装好（见 MEMORY.md 环境事实），待接入截图回归。
+
+### 4.7 `.gitignore` 的 `data/` 曾把 `engine/data/` 一起排除（已修复，务必记住）
+
+- **复现条件**：`.gitignore` 里写 `data/`（无前导斜杠）+ 仓库里存在任意层级的 `data` 目录。
+- **影响范围**：**全部游戏内容**。`engine/data/` 下是角色、怪物、装备、符文、宠物、成就与所有数值，
+  被 `data/` 这条规则一并排除后根本没进仓库。在原机器上因为文件还在磁盘上所以完全无感，
+  但换一台电脑 `git clone` 后立刻 `Error: Cannot find module './data/classes'`，
+  游戏无法启动。这是「换机器继续开发」场景下最致命的一个坑。
+- **规避手段**：只排除仓库根的运行数据，写成 `/data/`（带前导斜杠）。
+  已用 `git check-ignore -v` 验证：`data/game.db` 被排除、`engine/data/classes.js` 未被排除。
+- **检测方法**：改动 `.gitignore` 或调整目录结构后，必须做一次**干净克隆验证**——
+  `git clone <repo> <新目录>`，在新目录里跑 `npm test`。只看原机器永远发现不了这类问题，
+  因为缺失的文件还在本地磁盘上。
+- **已登记跟踪**：已修复（commit 见 `fix: 修复 .gitignore 误排除 engine/data`）。
+
+### 4.8 `package.json` 曾有两个指向不存在文件的脚本
+
+- **复现条件**：执行 `npm test` 或 `npm run seed`。
+- **影响范围**：新机器上手第一步就报错。`test` 指向 `engine/test.cjs`、
+  `seed` 指向 `scripts/seed.js`，两个文件都不存在（实际脚本在 `scripts/*.cjs`）。
+- **规避手段**：已把 `test` 改为 `node scripts/smoke.cjs && node scripts/ui-smoke.cjs`，
+  并补上 `test:engine` / `test:ui` / `test:e2e` / `balance` / `assets`。
+  删除不存在的 `seed`。已逐个验证 9 个脚本目标文件全部存在。
+- **已登记跟踪**：已修复。
+
+### 4.9 启动日志不打印 GM 令牌明文
+
+- **复现条件**：把启动横幅的输出复制到任何地方（交接文档、commit 说明、issue、聊天记录）。
+- **影响范围**：令牌会随日志进入 git 历史且永久留存，删文件也删不掉。
+  本项目已因此泄漏过一次，修复方式是重写全部提交 + `git gc --prune=now`。
+- **规避手段**：启动横幅只打印令牌所在文件路径。写文档引用验证结果时，
+  引用「令牌见 data/server.json」，不要粘贴日志里的令牌行。
+- **已登记跟踪**：是，见 AGENTS.md 与 `HANDOFF.md` 中的相关条款。
