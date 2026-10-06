@@ -5,7 +5,89 @@
 
 ## 1. 已完成内容
 
-### 阶段 0：规则落地与版本控制基线（本阶段）
+### 阶段 1：战场掉落改为服务器真实流水
+
+用户要求「死亡后掉落相应的物品」。改造前的 `stage.js` 的 `dropLoot()` 是纯随机装饰：
+用 `Math.random()` 决定掉几个、掉金币还是装备、什么颜色，与服务器实际结算完全无关。
+本阶段把掉落改成服务器权威下发、前端只负责播放。
+
+| 产出 | 路径 | 行为变化 | 验证方式 |
+| --- | --- | --- | --- |
+| 掉落流水 | `engine/combat.js` | `run` 新增 `dropSeq` + `drops`（环形保留最近 8 条）；击杀时记 `{t:'gold', gold, exp, foeUid, sprite}`；新增导出 `logDrop()` 与 `amendDrop()`；`snapshot()` 输出 `dropSeq` 与 `drops` | `node scripts/smoke.cjs` 第 14 组 16 项全绿，退出码 0 |
+| 宝箱入流水 | `engine/game.js` | `dropChest()` 把宝箱写进战斗流水，带 `chestType`、`chestZh`、`gold`、`itemCount` 与箱内装备的 `{slot, rarity}` 预览（不外泄完整属性）；`handleCombatEvent` 在处理 kill 后用 `amendDrop` 把裸值金币改写成世界事件加成后的实发值 | 同上；「实发金币已回填 (4 -> 8)」一项验证 amendDrop 生效 |
+| 掉落播放 | `public/js/stage.js` | 删除随机 `dropLoot()`；新增 `syncDrops()` / `dropGold()` / `dropChest()` / `spawnLoot()` / `collectLoot()` / `tickLoot()`；按 `seenDropId` 去重，`runId` 变化时重置游标；金币落在对应怪物的尸体坐标上 | `node scripts/ui-smoke.cjs` 第 6~8 组全绿，退出码 0 |
+| 掉落样式 | `public/css/style.css` | 新增金币掉落（🪙 + 实际金币数）、宝箱掉落（📦 + 名称 + 箱内件数 + 稀有度配色预览图标）、被捡走的飞向小队动画 | 由 ui-smoke 第 7 组断言 DOM 结构；视觉效果仍需浏览器目视（见第 4 节 4.6） |
+| 引擎用例 | `scripts/smoke.cjs` | 新增第 14 组 16 项：dropSeq 递增、流水有击杀掉落、每条带金币与 foeUid、id 无重复且严格递增、长度上限 8、宝箱入流水、预览只含槽位与稀有度、`amendDrop` 命中与未命中 | 退出码 0，末行「完成。」 |
+
+**本阶段回归（全部通过）**
+
+```
+node --check engine/*.js engine/data/*.js server/*.js public/js/*.js scripts/*.js
+  -> 全部通过，无 FAIL 行
+
+node scripts/smoke.cjs
+  -> 退出码 0，14 组全绿，新增第 14 组 16 项
+
+node scripts/ui-smoke.cjs
+  -> 退出码 0，10 组全绿，末行「✅ 前端逻辑全部通过」
+
+node server/index.js 重启后 curl http://127.0.0.1:8787/
+  -> HTTP 200
+
+node scripts/e2e.cjs
+  -> 退出码 0，末行「✅ 全部通过」，审计日志 42 条
+```
+
+**本阶段的数值影响验证（规范 4.1 / 4.3 / 4.4）**
+
+先用修复后的可复现脚本取「改动前」基线：把 `engine/combat.js` 与 `engine/game.js` 临时还原到
+基线版本运行 `node scripts/balance.cjs 6`，再换回改动版本运行同一条命令，两次输出 diff。
+
+```
+diff /tmp/before.txt /tmp/after.txt
+  -> 无差异
+  -> 结论：本阶段引擎改动对数值曲线零影响
+```
+
+指标逐项对比（seed=20260101，未改动前后完全相同）：
+
+| 指标 | 改动前 | 改动后 | 方向 | 是否超预期 |
+| --- | --- | --- | --- | --- |
+| 6h 最高等级 | Lv.20 | Lv.20 | 不变 | 否 |
+| 6h 通关数 | 19/30 | 19/30 | 不变 | 否 |
+| 6h 总击杀 | 6058 | 6058 | 不变 | 否 |
+| 6h 金币 | 73816 | 73816 | 不变 | 否 |
+| 6h 队伍 DPS | 2298 | 2298 | 不变 | 否 |
+| 6h 队伍 EHP | 11441 | 11441 | 不变 | 否 |
+
+本阶段只增加「把已结算的掉落如实传给前端」，不新增也不调整任何掉落概率、倍率或成长曲线。
+
+### 阶段 1b：修复平衡模拟脚本不可复现
+
+`createNewSave` 未传 seed 时用 `Math.random()` 生成种子（`engine/save.js:61`），
+而 `balance.cjs` 从不传 seed，导致每次运行的掉落与升级曲线都不同。
+这让规范 4.1「改动前保存基线」与 4.3「改动后逐项对比」根本无法执行。
+
+`balance.cjs` 新增第三个参数 `SEED`，默认固定 `20260101`；连跑两次输出逐字节一致。
+详细曲线见该次 commit 的提交说明。
+
+### 阶段 1c：修正前端测试桩的三处失真
+
+`scripts/ui-smoke.cjs` 的 DOM 桩有三处与浏览器不符，会让测试测不出真问题：
+`setTimeout` 同步执行（掉落物生成即被回收）、`classList` 不回写 `className`、
+`chest-prev` 正则连带匹配 `chest-prevs`。另修正时间基准混用
+（Node 全局 `performance.now()` 是进程启动至今，沙箱内返回 `Date.now()`，量纲不同）。
+详见该次 commit 的提交说明。
+
+### 阶段 1d：修复 `frame()` 首帧崩溃
+
+`Stage.heroes` 与 `Stage.foes` 原先只在 `sync()` 里赋值，而 rAF 循环可能在第一次
+`sync()` 之前就跑起来（`startWS` 与快照到达之间存在时间差），
+`tickHeal()` 的 `this.heroes.filter` 会抛 `TypeError`。
+浏览器表现为刚进战场就白屏。两个字段补空数组初值后修复。
+该缺陷在本次开发中由 DOM 桩测试实际捕获，非推测。
+
+### 阶段 0：规则落地与版本控制基线
 
 | 产出 | 路径 | 行为变化 | 验证方式 |
 | --- | --- | --- | --- |
@@ -66,6 +148,46 @@ node scripts/e2e.cjs
 - **选「可测的 stage 逻辑靠 DOM 桩而非浏览器」**：`scripts/ui-smoke.cjs` 用手写 DOM 桩加载 `stage.js`，覆盖换波清理、死亡掉落、40 帧主循环。代价是不校验真实 CSS 动画的视觉效果，记录在第 4 节。
 - **选「把数值收敛到 `engine/data/config.js` + GM 覆盖表」**：新增字段由 `listTunables` 自动出现在 GM 面板，前端零改动。加职业/怪物/装备只动数据表。
 
+### 4.7 `node scripts/balance.cjs` 改前必须确认种子是固定的
+
+- **复现条件**：在 `balance.cjs` 修复之前（commit `d4735cf` 之前）连跑两次 `node scripts/balance.cjs 6`。
+- **影响范围**：规范 4.1/4.3/4.4 全部失效。基线不可复现意味着「改动前后曲线对比」无法执行，
+  数值改动实际上处于无验证状态。表现为两次运行输出差异极大（0.5h 金币 6131 vs 9196），
+  容易被误判为「我这次改动影响了平衡」。
+- **规避手段**：必须传第三个参数或使用默认固定种子（`seed=20260101`）。
+  做前后对比时只暂存被改的引擎文件，**不要用 `git stash`** ——
+  stash 会把 `balance.cjs` 的种子修复一起撤掉，导致「改动前」跑的是随机种子，对比无效。
+  正确做法：`git checkout -- engine/combat.js engine/game.js` 单独还原引擎文件。
+- **已登记跟踪**：已修复，保留此条说明正确做法。
+
+### 4.8 `engine/save.js` 的 `createNewSave` 默认种子是随机的
+
+- **复现条件**：任何不传 `opts.seed` 的调用。
+- **影响范围**：所有新建存档的玩家。`engine/save.js:61` 用 `Math.floor(Math.random() * 2 ** 31)`。
+  对真实玩家这是正确行为（每人对局不同），但对任何需要可复现的脚本都是陷阱。
+- **规避手段**：写测试或模拟脚本时必须显式传 `seed`。不要为了「方便」把 `createNewSave`
+  的默认值改成固定值——那会让所有玩家的掉落序列完全一致。
+- **已登记跟踪**：是，待在 `engine/save.js` 的这行加注释标明该约束（本次未改，避免与功能提交混提）。
+
+### 4.9 `scripts/ui-smoke.cjs` 的 DOM 桩与浏览器有三处已知差异
+
+- **复现条件**：依赖桩未实现的行为写断言。
+- **影响范围**：前端测试的可信度。具体差异：`setTimeout` 改为异步队列（`flushTimers()` 手动驱动）；
+  `classList.add` 不回写 `className` 字符串，判定样式要用 `classList.contains`；
+  `getBoundingClientRect` 返回固定值，所以所有元素的坐标相同，测不了定位逻辑。
+- **规避手段**：写断言前先确认桩是否实现了该行为。判定元素是否被回收用
+  `dataset.collected`，不要用 `className.includes('collected')`。
+- **已登记跟踪**：部分已修复，第三条（坐标）待处理，见第 3 节「无头浏览器截图回归」。
+
+### 4.10 掉落流水只保留最近 8 条
+
+- **复现条件**：单次 tick（1 秒）内击杀数超过 8，或客户端断线重连。
+- **影响范围**：`run.drops` 会被 `splice` 截断到 8 条（`engine/combat.js` 的 `DROP_LOG_MAX`）。
+  极端情况下前端会漏播最早的几条掉落动画，但**不影响任何实际收益**——
+  金币与经验在 `handleCombatEvent` 里已直接入账，流水只是给前端看的。
+- **规避手段**：无需处理，这是有意的设计。若要调大，改 `DROP_LOG_MAX` 并同步评估快照体积。
+- **已登记跟踪**：否，属预期行为。
+
 ## 3. 明确未做的范围
 
 | 排除项 | 排除原因 | 纳入条件 |
@@ -78,6 +200,9 @@ node scripts/e2e.cjs
 | 音效与背景音乐 | 未列入用户需求，且素材无来源 | 用户提供音频素材 |
 | 符文节点扩充到 197 | 现有 50 节点已覆盖 8 分支，长期成长深度不足但不影响可玩性 | 长期内容规划阶段 |
 | CI 自动化 | 当前为单人本地项目，靠 `scripts/` 三个脚本手动回归 | 多人并行开发时接入 |
+| 掉落物被小队「走过去捡」的位移动画 | 本阶段只做了原地弹跳 + 飞向小队左侧的捡取动画。真正让 `heroGroup` 的 `left` 移动到掉落点需要额外的目标点插值，会与波次推进的 `targetLead` 抢同一个位置值 | 掉落物数量与位置需求明确后再做 |
+| 掉落流水落盘 | `run.drops` 只存在运行时，不写入存档。断线重连后当前 run 的历史掉落动画不会补播（收益已入账，不受影响） | 用户要求「回放上一场战斗的掉落」时 |
+| 无头浏览器截图回归 | `agent-browser` 未安装且 `node` 不在 PATH 中，本阶段无法自动截图。视觉验证仍靠人工打开页面 | 装好 `agent-browser` 后把截图比对接进 `scripts/` |
 
 ## 4. 已知问题与坑
 

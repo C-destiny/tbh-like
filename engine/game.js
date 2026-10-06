@@ -137,6 +137,8 @@ class Player {
       const gold = Math.round(ev.gold * em.goldMul);
       const exp = Math.round(ev.exp * em.expMul);
       st.gold += gold; st.stats.totalGold += gold;
+      // 战斗层按裸值记的掉落，这里改写成实发值，前端飘的数字才对得上
+      combat.amendDrop(this.run, ev.dropId, { gold, exp });
       this.grantExp(exp);
     } else if (ev.t === 'waveClear') {
       if (loot.rollWaveChest(this.rng, { bonuses: ctx.bonuses, eventDropMul: em.dropMul })) {
@@ -157,6 +159,15 @@ class Player {
       bonuses: ctx.bonuses
     });
     st.chests.push(chest);
+    // 记进战斗流水：宝箱开之前前端就能在战场上把它画出来
+    if (this.run) {
+      combat.logDrop(this.run, {
+        t: 'chest', chestType: type, chestZh: chest.zh,
+        gold: chest.gold, itemCount: chest.items.length,
+        // 箱内装备只给槽位与稀有度做展示，不外泄完整属性
+        items: chest.items.map(i => ({ slot: i.slot, rarity: i.rarity }))
+      });
+    }
     this.pushLog('chest', `获得 ${chest.zh}`);
     this.onEvent(this, { t: 'chest', chest: { uid: chest.uid, type, zh: chest.zh } });
     return chest;

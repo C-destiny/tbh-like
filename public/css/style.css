@@ -212,24 +212,50 @@ select, input[type=text], input[type=number] {
 .sfx-unit.act-heal .walk { animation: healGlow .5s ease-out; }
 .sfx-unit.dying { animation: dieOut .46s ease-in forwards; }
 
-/* 掉落物 */
+/* 掉落物：全部来自服务器的真实掉落流水（见 engine/combat.js 的 logDrop） */
 .loot {
   position: absolute; transform: translate(-50%, -50%);
-  animation: lootPop .95s cubic-bezier(.3,.8,.4,1) forwards;
-  z-index: 5;
+  animation: lootPop .5s cubic-bezier(.3,.8,.4,1) forwards;
+  z-index: 5; text-align: center; pointer-events: none;
 }
-.loot span { display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
-.loot.coin span { font-size: 18px; }
-.loot.collected { animation: lootFly .6s ease-in forwards; }
+.loot .coin-ico {
+  display: block; font-size: 19px; line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.7));
+}
+.loot .loot-amt {
+  display: block; font-size: 11px; font-weight: 700; color: #ffdc7a;
+  text-shadow: 0 1px 3px #000, 0 0 6px rgba(0,0,0,.9); margin-top: 1px;
+}
+
+/* 宝箱：本体 + 名称 + 箱内装备预览 */
+.loot .chest-ico {
+  display: block; font-size: 30px; line-height: 1;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,.7));
+  animation: chestIdle 1.6s ease-in-out infinite;
+}
+.loot .chest-boss { filter: drop-shadow(0 0 10px rgba(245,158,11,.8)) drop-shadow(0 3px 6px rgba(0,0,0,.7)); }
+.loot .chest-act { filter: drop-shadow(0 0 12px rgba(239,68,68,.85)) drop-shadow(0 3px 6px rgba(0,0,0,.7)); }
+@keyframes chestIdle { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-4px) } }
+.loot .chest-lb {
+  display: block; font-size: 10px; color: #ffe9a8; white-space: nowrap;
+  text-shadow: 0 1px 3px #000; margin-top: 2px;
+}
+.loot .chest-prevs { display: flex; gap: 3px; justify-content: center; margin-top: 3px; }
+.loot .chest-prev { display: inline-flex; opacity: .95; }
+
 @keyframes lootPop {
   0%   { opacity: 0; transform: translate(-50%, -50%) scale(.4) }
-  30%  { opacity: 1; transform: translate(-50%, -160%) scale(1.15) rotate(-12deg) }
-  60%  { transform: translate(-50%, -60%) scale(1) rotate(8deg) }
-  100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(0) }
+  60%  { opacity: 1; transform: translate(-50%, -140%) scale(1.18) }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1) }
+}
+/* 被捡走：缩小上飘淡出。方向朝小队（左侧）偏移 */
+.loot.collected {
+  animation: lootFly .6s ease-in forwards;
+  opacity: 0;
 }
 @keyframes lootFly {
   0%   { opacity: 1; transform: translate(-50%, -50%) scale(1) }
-  100% { opacity: 0; transform: translate(-50%, -180%) scale(.5) }
+  100% { opacity: 0; transform: translate(-150%, -190%) scale(.45) }
 }
 
 /* 刀光 */

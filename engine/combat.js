@@ -67,6 +67,10 @@ function createRun(state, ctx, opts = {}) {
     elapsed: 0,
     kills: 0, gold: 0, exp: 0,
     chestDrops: [],       // 本场掉落的宝箱（未开）
+    // 真实掉落流水：给前端战场渲染「怪死了掉了个什么东西」用。
+    // 环形保留最近 DROP_LOG_MAX 条，靠递增 id 让前端去重（快照会重复推送同一条）。
+    dropSeq: 0,
+    drops: [],
     startedAt: Date.now(),
     bossWave: stage.waves - 1,
     isActEnd: !!stage.isActEnd,
@@ -74,6 +78,24 @@ function createRun(state, ctx, opts = {}) {
   };
   spawnWave(run, stage, diff);
   return run;
+}
+
+// 快照里最多带几条掉落记录：够覆盖 1 秒 tick 内的击杀量，又不至于让快照明显变大
+const DROP_LOG_MAX = 8;
+
+/**
+ * 记一条真实掉落到 run 的流水里。
+ * @param {object} run 当前挑战
+ * @param {object} rec { t: 'gold'|'chest', gold?, exp?, chestType?, foeUid? }
+ *   foeUid 用来让前端把掉落画在对应怪物的尸体位置上；没有则由前端放到场地中央。
+ */
+function logDrop(run, rec) {
+  if (!run) return null;
+  run.dropSeq = (run.dropSeq || 0) + 1;
+  const entry = { id: run.dropSeq, at: Date.now(), ...rec };
+  run.drops.push(entry);
+  if (run.drops.length > DROP_LOG_MAX) run.drops.splice(0, run.drops.length - DROP_LOG_MAX);
+  return entry;
 }
 
 function spawnWave(run, stage, diff) {
@@ -225,7 +247,12 @@ function dealDamage(run, enemy, amount, events) {
     run.kills++;
     run.gold += enemy.gold;
     run.exp += enemy.exp;
-    events.push({ t: 'kill', protoId: enemy.protoId, zh: enemy.zh, gold: enemy.gold, exp: enemy.exp });
+    // 先按裸值记一条掉落；game.js 知道世界事件加成，会回来把 gold/exp 改成实发值
+    const drop = logDrop(run, { t: 'gold', gold: enemy.gold, exp: enemy.exp, foeUid: enemy.uid, sprite: enemy.sprite });
+    events.push({
+      t: 'kill', protoId: enemy.protoId, zh: enemy.zh, gold: enemy.gold, exp: enemy.exp,
+      dropId: drop ? drop.id : 0
+    });
   }
 }
 
@@ -233,6 +260,19 @@ function hashCode(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
   return h;
+}
+
+/**
+ * 把一条已记录的掉落改成实发值（世界事件 / GM 加成会放大金币与经验）。
+ * 由 game.js 在处理 kill 事件后调用，保证前端看到的掉落数字与实际入账一致。
+ * @returns {boolean} 是否命中并更新
+ */
+function amendDrop(run, dropId, patch) {
+  if (!run || !dropId) return false;
+  const d = run.drops.find(x => x.id === dropId);
+  if (!d) return false;
+  Object.assign(d, patch);
+  return true;
 }
 
 /** 战斗进度快照，给前端渲染血条用 */
@@ -249,6 +289,9 @@ function snapshot(run) {
     kills: run.kills,
     gold: Math.round(run.gold),
     exp: Math.round(run.exp),
+    // 真实掉落流水（可能为空数组）。前端按 dropSeq 去重，只播自己没见过的 id
+    dropSeq: run.dropSeq || 0,
+    drops: run.drops || [],
     enemies: run.enemies.map(e => ({
       uid: e.uid, zh: e.zh, sprite: e.sprite, tier: e.tier,
       hp: Math.max(0, Math.round(e.hp)), maxHp: e.maxHp, alive: e.alive,
@@ -265,4 +308,4 @@ function snapshot(run) {
   };
 }
 
-module.exports = { createRun, step, snapshot, getStage, listStages, stageTable, invalidateStageCache };
+module.exports = { createRun, step, snapshot, logDrop, amendDrop, getStage, listStages, stageTable, invalidateStageCache };

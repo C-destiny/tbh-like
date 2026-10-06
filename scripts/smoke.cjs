@@ -128,4 +128,51 @@ for (const d of ['Normal', 'Hard', 'Expert', 'Hell']) {
   assert(l.length === 30, `${d} 关卡数 ${l.length}`);
 }
 
+console.log('\n== 14. 掉落流水（前端战场要靠它画真实掉落）==');
+{
+  // 用独立存档，避免受上面 120 秒推进与手动 dropChest 的干扰
+  const st2 = createNewSave({ name: '掉落测试', classId: 'roudan' });
+  const p2 = new Player(st2);
+  p2.act('start');
+  for (let i = 0; i < 90; i++) p2.tick(1);
+
+  const snap = combat.snapshot(p2.run);
+  assert(!!snap, '战斗快照存在');
+  assert(typeof snap.dropSeq === 'number' && snap.dropSeq > 0, `dropSeq 递增 (${snap.dropSeq})`);
+  assert(Array.isArray(snap.drops) && snap.drops.length > 0, `快照带真实掉落流水 (${snap.drops.length} 条)`);
+
+  const golds = snap.drops.filter(d => d.t === 'gold');
+  assert(golds.length > 0, `含击杀掉落 (${golds.length} 条)`);
+  assert(golds.every(d => d.gold > 0 && d.foeUid), '每条击杀掉落都有金币数与怪物 uid');
+
+  // id 必须严格递增且唯一：前端靠它去重，重复 id 会导致掉落不播
+  const ids = snap.drops.map(d => d.id);
+  assert(new Set(ids).size === ids.length, '掉落 id 无重复');
+  assert(ids.every((v, i) => i === 0 || v > ids[i - 1]), '掉落 id 严格递增');
+
+  // 流水只保留最近 8 条，不能随挂机时间无限增长
+  assert(snap.drops.length <= 8, `流水长度有上限 (${snap.drops.length} <= 8)`);
+
+  // 金币数字必须与实际入账一致（世界事件加成后仍要对得上）
+  const sumDrop = golds.reduce((a, b) => a + b.gold, 0);
+  assert(sumDrop > 0, `流水金币合计 ${sumDrop}`);
+
+  // 宝箱掉落：开箱前就能在快照里看到，且带箱内装备的槽位+稀有度预览
+  p2.dropChest('boss');
+  const s2 = combat.snapshot(p2.run);
+  const chestDrop = s2.drops.find(d => d.t === 'chest');
+  assert(!!chestDrop, '宝箱掉落进入战斗流水');
+  assert(chestDrop.chestType === 'boss', `宝箱类型正确 (${chestDrop.chestType})`);
+  assert(chestDrop.items && chestDrop.items.length > 0, `箱内装备预览 ${chestDrop.items.length} 件`);
+  assert(chestDrop.items.every(i => i.slot && i.rarity && !i.main), '预览只含槽位与稀有度，不外泄完整属性');
+
+  // amendDrop：把裸值改成实发值
+  const target = s2.drops.find(d => d.t === 'gold');
+  const beforeGold = target.gold;
+  assert(combat.amendDrop(p2.run, target.id, { gold: beforeGold * 2 }) === true, 'amendDrop 命中并更新');
+  const after = combat.snapshot(p2.run).drops.find(d => d.id === target.id);
+  assert(after.gold === beforeGold * 2, `实发金币已回填 (${beforeGold} -> ${after.gold})`);
+  assert(combat.amendDrop(p2.run, 99999, { gold: 1 }) === false, 'amendDrop 对不存在的 id 返回 false');
+}
+
 console.log('\n完成。\n');

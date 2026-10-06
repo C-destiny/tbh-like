@@ -13,6 +13,14 @@
   const WALK_FRAME_MS = 130;   // 走路帧切换间隔
   const MARCH_MS = 900;        // 推进动画时长
   const ENTER_MS = 1100;       // 怪物入场时长
+  const LOOT_LIFE_MS = 1100;   // 掉落物在地上停留多久后被「捡走」
+
+  // 宝箱按类型的展示样式：class 决定箱子长相与光效
+  const CHEST_STYLE = {
+    normal: { cls: 'chest-normal', label: '宝箱' },
+    boss: { cls: 'chest-boss', label: '首领宝箱' },
+    actBoss: { cls: 'chest-act', label: '幕末宝箱' }
+  };
 
   const Stage = {
     units: new Map(),          // uid -> unit
@@ -25,6 +33,14 @@
     walkTimer: 0,
     walkFrame: 0,
     healerTimer: 0,
+    seenDropId: 0,             // 已播过的掉落 id（快照每秒重推，靠它去重）
+    runId: null,               // 当前 run 的 id，换 run 就重置去重游标
+    deathSpots: {},            // foeUid -> 尸体在战场里的坐标，掉落要落在同一个点
+    pendingLoot: [],           // 场上还没被捡走的掉落物元素
+    // 下面两个由 sync() 填充。frame() 可能先于第一次 sync 跑完启动（rAF 已排队），
+    // 所以必须给空数组初值，否则 tickHeal / attack 里 filter 会抛
+    heroes: [],
+    foes: [],
 
     dom() {
       return {
@@ -56,6 +72,7 @@
 
       this.syncHeroes(v, c, targetLead);
       this.syncFoes(c);
+      this.syncDrops(c);
       this.renderHeroCards(v, c);
 
       if (d.hint) d.hint.style.display = (running || (c && c.enemies.length)) ? 'none' : '';
@@ -207,38 +224,107 @@
 
     killFoe(u) {
       u.alive = false;
-      const d = this.dom();
-      const rect = u.el.getBoundingClientRect();
-      const vrect = d.view.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2 - vrect.left;
-      const cy = rect.top + rect.height * 0.6 - vrect.top;
+      const p = this.unitCenter(u);
+      // 记下尸体位置：随后来到的掉落流水要落在同一个点上，
+      // 顺序是先 syncFoes（怪物消失）再 syncDrops（掉落出现），所以这里必须先存
+      this.deathSpots[u.key] = p;
 
       u.el.classList.add('dying');
       setTimeout(() => u.el.remove(), 480);
-      this.dropLoot(cx, cy, u.boss);
+    },
+
+    /** 取单位在战场坐标系里的中心点（相对 stage-view 左上角） */
+    unitCenter(u) {
+      const d = this.dom();
+      const rect = u.el.getBoundingClientRect();
+      const vrect = d.view.getBoundingClientRect();
+      return {
+        x: rect.left + rect.width / 2 - vrect.left,
+        y: rect.top + rect.height * 0.62 - vrect.top
+      };
     },
 
     // ---------------------------------------------------------------- 掉落
-    dropLoot(x, y, boss) {
-      const d = this.dom();
-      const n = boss ? 3 : (Math.random() < 0.45 ? 1 : 0);
-      for (let i = 0; i < Math.max(1, n); i++) {
-        const isCoin = Math.random() < (boss ? 0.35 : 0.7);
-        const el = document.createElement('div');
-        el.className = 'loot' + (isCoin ? ' coin' : ' gear');
-        el.style.left = x + 'px';
-        el.style.top = y + 'px';
-        el.style.animationDelay = (i * 90) + 'ms';
-        el.innerHTML = isCoin
-          ? `<span>🪙</span>`
-          : GearUI.gearIcon(pick(['weapon', 'helmet', 'armor', 'boots', 'ring', 'amulet']),
-            pick(['#9aa3b2', '#4caf50', '#3f8cff', '#a855f7', '#f59e0b']), 20);
-        d.drops.appendChild(el);
-        el.addEventListener('animationend', () => {
-          el.classList.add('collected');
-          setTimeout(() => el.remove(), 620);
-        });
+    /**
+     * 播放服务器记录的真实掉落。
+     * 快照每秒重推同一条记录，所以用 seenDropId 只播新 id；
+     * 断线重连后 runId 变了要重置，否则新的一条会被当成旧的丢掉。
+     */
+    syncDrops(c) {
+      if (!c || !c.drops) return;
+      if (this.runId !== c.runId) {
+        this.runId = c.runId;
+        this.seenDropId = 0;
+        this.deathSpots = {};
       }
+      for (const rec of c.drops) {
+        if (!rec || rec.id <= this.seenDropId) continue;
+        this.seenDropId = rec.id;
+        if (rec.t === 'gold') this.dropGold(rec);
+        else if (rec.t === 'chest') this.dropChest(rec);
+      }
+    },
+
+    /** 击杀掉落：金币 + 经验，飘在尸体位置上 */
+    dropGold(rec) {
+      const p = this.deathSpots[rec.foeUid] || this.defaultDropPoint();
+      const g = Math.max(1, Math.round(rec.gold || 0));
+      const x = Math.max(28, Math.min(p.x, this.dropBounds().w - 28));
+      this.spawnLoot(x, p.y, `
+        <span class="coin-ico">🪙</span>
+        <span class="loot-amt">+${g}</span>`, 'gold');
+    },
+
+    /** 宝箱掉落：直接画出箱子本体，并按箱内稀有度点亮对应颜色的装备小图标 */
+    dropChest(rec) {
+      const st = CHEST_STYLE[rec.chestType] || CHEST_STYLE.normal;
+      const p = this.defaultDropPoint();
+      const x = Math.max(40, Math.min(p.x, this.dropBounds().w - 40));
+      const previews = (rec.items || []).slice(0, 3).map(it =>
+        `<span class="chest-prev" style="color:${RARITY_COLOR[it.rarity] || '#9aa3b2'}">${
+          GearUI.gearIcon(it.slot, RARITY_COLOR[it.rarity] || '#9aa3b2', 13)}</span>`).join('');
+      this.spawnLoot(x, p.y, `
+        <span class="chest-ico ${st.cls}">📦</span>
+        <span class="chest-lb">${st.label}${rec.itemCount ? ' · ' + rec.itemCount + ' 件' : ''}</span>
+        ${previews ? `<span class="chest-prevs">${previews}</span>` : ''}`, 'chest');
+    },
+
+    /** 没有对应尸体时（宝箱在波次间隙掉）落在场地中偏右 */
+    defaultDropPoint() {
+      const b = this.dropBounds();
+      return { x: b.w * 0.62, y: b.h * 0.72 };
+    },
+
+    dropBounds() {
+      const el = this.dom().view;
+      const r = (el && el.getBoundingClientRect) ? el.getBoundingClientRect() : { width: 800, height: 250 };
+      return { w: r.width || 800, h: r.height || 250 };
+    },
+
+    /**
+     * 生成一个掉落物：弹出来 -> 在地上停 LOOT_LIFE_MS -> 飞向小队被捡走。
+     * 「捡走」只影响这段 DOM 动画，物品本身由服务器直接入背包，不经过这里。
+     */
+    spawnLoot(x, y, html, kind) {
+      const d = this.dom();
+      const el = document.createElement('div');
+      el.className = 'loot ' + kind;
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      el.dataset.born = String(performance.now());
+      el.innerHTML = html;
+      d.drops.appendChild(el);
+      this.pendingLoot.push(el);
+      // 兜底清理：主循环停了（页面隐藏）时也要保证不残留
+      setTimeout(() => this.collectLoot(el), LOOT_LIFE_MS + 400);
+    },
+
+    collectLoot(el) {
+      if (!el || el.dataset.collected) return;
+      el.dataset.collected = '1';
+      this.pendingLoot = this.pendingLoot.filter(x => x !== el);
+      el.classList.add('collected');
+      setTimeout(() => el.remove(), 620);
     },
 
     // ---------------------------------------------------------------- 主循环
@@ -287,7 +373,22 @@
         this.tickHeal(dt);
       }
 
+      this.tickLoot(now);
       requestAnimationFrame(this.frame.bind(this));
+    },
+
+    /**
+     * 掉落物落地一段时间后被小队捡走。
+     * 用「落地时刻 + LOOT_LIFE_MS」判定，不依赖 CSS animationend：
+     * 标签页切到后台时动画会暂停，事件不触发会导致掉落物永久堆在场上。
+     */
+    tickLoot(now) {
+      if (!this.pendingLoot.length) return;
+      for (const el of this.pendingLoot.slice()) {
+        if (!el.isConnected) { this.collectLoot(el); continue; }
+        const born = Number(el.dataset.born || 0);
+        if (born && now - born >= LOOT_LIFE_MS) this.collectLoot(el);
+      }
     },
 
     tickHeal(dt) {
@@ -380,6 +481,13 @@
   };
 
   // ---- 小工具 ----
+  // 稀有度配色：与 engine/data/items.js 的 RARITY_COLOR 保持一致，
+  // 抽成前端常量是为了让 stage.js 不必等 gamedata 到达就能画出掉落预览
+  const RARITY_COLOR = {
+    Common: '#9aa3b2', Uncommon: '#4caf50', Rare: '#3f8cff',
+    Epic: '#a855f7', Legendary: '#f59e0b', Mythic: '#ef4444'
+  };
+
   const SPRITES = {
     slime: '🟢', wolf: '🐺', bandit: '🥷', bat: '🦇', boar: '🐗', skeleton: '💀',
     ogre: '👹', treant: '🌳', fly: '🪰', lavaworm: '🐛', golem: '🗿', shaman: '🔮',
