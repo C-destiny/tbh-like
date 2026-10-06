@@ -61,13 +61,27 @@ const document = {
   title: ''
 };
 
+// 定时器队列：浏览器里 setTimeout 是异步的，桩必须也异步，
+// 否则掉落物刚生成就会被同一个同步栈里的清理回调收掉，测不到中间态
+let timerQueue = [];
+function flushTimers(maxRounds = 20) {
+  let rounds = 0;
+  while (timerQueue.length && rounds++ < maxRounds) {
+    const batch = timerQueue;
+    timerQueue = [];
+    for (const fn of batch) {
+      try { fn(); } catch (e) { console.log('  定时器抛错: ' + e.message); fails++; }
+    }
+  }
+}
+
 let rafQueue = [];
 const sandbox = {
   console, document,
   window: {},
   requestAnimationFrame: (fn) => { rafQueue.push(fn); return rafQueue.length; },
   performance: { now: () => Date.now() },
-  setTimeout: (fn) => { try { fn(); } catch (e) { throw e; } return 0; },
+  setTimeout: (fn) => { timerQueue.push(fn); return timerQueue.length; },
   clearTimeout: () => {},
   Math, Date, JSON, Object, Array, String, Number, Boolean, Set, Map, parseInt, parseFloat, isNaN,
   localStorage: { getItem: () => null, setItem: () => {} }
@@ -125,8 +139,8 @@ const view = {
   inventory: []
 };
 const combat = {
-  stageId: '1-1', difficulty: 'Normal', wave: 1, waveCount: 5, phase: 'fighting', elapsed: 10,
-  kills: 3, gold: 30, exp: 40,
+  runId: 'run_1', stageId: '1-1', difficulty: 'Normal', wave: 1, waveCount: 5, phase: 'fighting', elapsed: 10,
+  kills: 3, gold: 30, exp: 40, dropSeq: 0, drops: [],
   enemies: [
     { uid: 'e1', zh: '史莱姆', sprite: 'slime', tier: 'normal', hp: 20, maxHp: 26, alive: true, atk: 5, atkSpeed: 0.7 },
     { uid: 'e2', zh: '森林狼', sprite: 'wolf', tier: 'normal', hp: 30, maxHp: 34, alive: true, atk: 9, atkSpeed: 1.1 }
@@ -143,6 +157,7 @@ try {
   ok(sandbox.Stage.units.size === 4, `场上单位数正确（${sandbox.Stage.units.size} = 2 英雄 + 2 怪物）`);
   ok(sandbox.Stage.heroes.length === 2, '英雄列表正确');
   ok(sandbox.Stage.foes.length === 2, '敌人列表正确');
+  ok(sandbox.Stage.runId === 'run_1', '记录了 runId');
 } catch (e) {
   ok(false, 'sync 抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
 }
@@ -159,32 +174,105 @@ try {
   ok(false, '换波抛错: ' + e.message);
 }
 
-console.log('\n== 6. 怪物死亡掉落 ==');
+console.log('\n== 6. 怪物死亡掉落（真实流水）==');
 try {
+  const drops = registry.get('layer-drops');
+  const before = drops.children.length;
+  // 模拟：e3 死了，服务器在同一次快照里下发这条击杀掉落
   const c3 = JSON.parse(JSON.stringify(combat));
-  c3.enemies = [{ uid: 'e3', zh: '野猪', sprite: 'boar', tier: 'actBoss', hp: 0, maxHp: 210, alive: false, atk: 14, atkSpeed: 0.6 }];
+  c3.enemies = [{ uid: 'e3', zh: '野猪', sprite: 'boar', tier: 'normal', hp: 0, maxHp: 210, alive: false, atk: 14, atkSpeed: 0.6 }];
+  c3.dropSeq = 1;
+  c3.drops = [{ id: 1, t: 'gold', gold: 42, exp: 17, foeUid: 'e3', sprite: 'boar' }];
   sandbox.Stage.sync(view, c3);
   ok(sandbox.Stage.foes.length === 0, '死亡怪物已从场上移除');
-  const drops = registry.get('layer-drops');
-  ok(drops.children.length > 0, `生成了掉落物（${drops.children.length} 个）`);
+  const added = drops.children.length - before;
+  ok(added === 1, `按真实流水生成了 1 个掉落物（实际 ${added}）`);
+  const loot = drops.children[drops.children.length - 1];
+  ok(loot.className.includes('gold'), '掉落物标记为金币类型');
+  ok(loot.innerHTML.includes('+42'), '显示服务器给的实际金币数');
+  ok(!!sandbox.Stage.deathSpots.e3, '记住了 e3 的尸体坐标');
+  ok(sandbox.Stage.seenDropId === 1, '去重游标推进到 1');
 } catch (e) {
-  ok(false, '掉落抛错: ' + e.message);
+  ok(false, '掉落抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
 }
 
-console.log('\n== 7. 动画帧循环 ==');
+console.log('\n== 7. 掉落去重与宝箱掉落 ==');
 try {
-  for (let i = 0; i < 40; i++) sandbox.Stage.frame(performance.now() + i * 60);
+  const drops = registry.get('layer-drops');
+  // 同一份快照重推一次（服务器每秒推同一个 run），不能重复播
+  const c4 = JSON.parse(JSON.stringify(combat));
+  c4.wave = 1;
+  c4.enemies = [];
+  c4.dropSeq = 1;
+  c4.drops = [{ id: 1, t: 'gold', gold: 42, exp: 17, foeUid: 'e3', sprite: 'boar' }];
+  const before = drops.children.length;
+  sandbox.Stage.sync(view, c4);
+  ok(drops.children.length === before, '重复快照没有重复生成掉落物');
+
+  // 新 run 的 id 会归零，必须能重新播
+  const c5 = JSON.parse(JSON.stringify(c4));
+  c5.runId = 'run_2';
+  c5.dropSeq = 1;
+  c5.drops = [{ id: 1, t: 'chest', chestType: 'boss', chestZh: '首领宝箱', gold: 900, itemCount: 2,
+    items: [{ slot: 'weapon', rarity: 'Epic' }, { slot: 'ring', rarity: 'Legendary' }] }];
+  const b2 = drops.children.length;
+  sandbox.Stage.sync(view, c5);
+  ok(drops.children.length === b2 + 1, '换 run 后同 id 的掉落能重新播放');
+  const chest = drops.children[drops.children.length - 1];
+  ok(chest.className.includes('chest'), '宝箱掉落标记为 chest 类型');
+  ok(chest.innerHTML.includes('首领宝箱'), '显示宝箱名称');
+  ok(chest.innerHTML.includes('2 件'), '显示箱内装备数量');
+  // 注意：容器 class 是 chest-prevs，会被 chest-prev 的正则匹配到，
+  // 所以必须带引号锚定 class="chest-prev" 才能数准
+  ok((chest.innerHTML.match(/class="chest-prev"/g) || []).length === 2, '画出了 2 个装备预览图标');
+  ok(chest.innerHTML.includes('chest-prevs'), '装备预览有独立容器');
+} catch (e) {
+  ok(false, '宝箱掉落抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
+}
+
+console.log('\n== 8. 掉落被捡走 ==');
+try {
+  const drops = registry.get('layer-drops');
+  const n0 = sandbox.Stage.pendingLoot.length;
+  ok(n0 > 0, `场上有 ${n0} 个待捡掉落物`);
+  // 时间基准必须用 Date.now()：沙箱里 performance.now() 返回的是 Date.now()，
+  // 而 Node 全局 performance.now() 是「进程启动至今」的毫秒数，量纲不同不能混用
+  const t0 = Date.now() + 5000;
+  sandbox.Stage.frame(t0);
+  ok(sandbox.Stage.pendingLoot.length === 0, '超时后掉落物全部被捡走');
+  // 用 dataset.collected 判定回收，用 classList 的内部集合判定样式类：
+  // 桩的 classList.add 不回写 className 字符串（真实 DOM 会），所以查 _s 才是对桩的正确检查
+  const left = drops.children.filter(c => c.dataset.collected !== '1').length;
+  ok(left === 0, '没有残留未回收的掉落物');
+  const tagged = drops.children.filter(c => c.classList.contains('collected')).length;
+  ok(tagged === drops.children.length, `每个被捡的掉落物都加上了 collected 类（${tagged}/${drops.children.length}）`);
+  // 再跑一帧不能因为空数组崩
+  sandbox.Stage.frame(t0 + 60);
+  ok(true, '掉落清空后继续跑帧不崩');
+  // 延迟清理回调也要能安全执行
+  flushTimers();
+  ok(true, '延迟清理定时器全部执行完毕无异常');
+  ok(drops.children.length === 0, '掉落物 DOM 已全部移除');
+} catch (e) {
+  ok(false, '捡取抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
+}
+
+console.log('\n== 9. 动画帧循环 ==');
+try {
+  for (let i = 0; i < 40; i++) sandbox.Stage.frame(Date.now() + 6000 + i * 60);
   ok(true, '连续 40 帧无异常');
 } catch (e) {
   ok(false, '帧循环抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
 }
 
-console.log('\n== 8. 停止挂机 / 空状态 ==');
+console.log('\n== 10. 停止挂机 / 空状态 ==');
 try {
   sandbox.Stage.sync({ ...view, running: false }, null);
   ok(true, '空战斗数据不崩');
   sandbox.Stage.sync({ heroes: [], running: false, inventory: [] }, null);
   ok(true, '空队伍不崩');
+  sandbox.Stage.sync(view, { ...combat, drops: null });
+  ok(true, '快照缺 drops 字段不崩');
 } catch (e) {
   ok(false, '空状态抛错: ' + e.message);
 }
