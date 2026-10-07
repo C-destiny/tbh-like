@@ -5,6 +5,8 @@
 const { Player, createNewSave } = require('../engine/game');
 const { migrate } = require('../engine/save');
 const combat = require('../engine/combat');
+const loot = require('../engine/loot');
+const { makeRng } = require('../engine/util');
 const T = require('../engine/tunables');
 
 function assert(cond, label) {
@@ -107,6 +109,75 @@ assert(m2.heroes[0].skillPoints === 6, `旧技能点已退回 (1 + 3 + 2 = ${m2.
 assert(Object.keys(m2.heroes[0].skills).length === 0, '旧技能已清空');
 assert(m2.inventory[0].classId === 'roudan' && m2.inventory[1].classId === 'roudan', '装备职业标签已转换');
 assert(JSON.stringify(m2.unlockedClasses) === JSON.stringify(['niuma', 'roudan']), '可选角色已更新');
+
+// v2 -> v3：宝箱分档 normal -> common/fine/boss/actBoss
+const old3 = JSON.parse(JSON.stringify(p.state));
+old3.schemaVersion = 2;
+old3.chests = [
+  // 旧档的普通箱：type/zh 都要换成新定义，不能只改 type
+  { uid: 'c1', type: 'normal', zh: '普通宝箱', items: [{ slot: 'weapon', rarity: 'Common' }], gold: 100, materials: [], coins: [], opened: false },
+  { uid: 'c2', type: 'boss', zh: '首领宝箱', items: [], gold: 500, materials: [], coins: [], opened: false },
+  // 脏数据：未知档位必须被收敛到 common，不能留下孤儿宝箱
+  { uid: 'c3', type: '???', zh: '???', items: [], gold: 1, materials: [], coins: [], opened: false },
+  // 已开启的不用改
+  { uid: 'c4', type: 'normal', zh: '普通宝箱', items: [], gold: 1, opened: true }
+];
+old3.chestCd = { normal: 12, boss: 34, actBoss: 56 };
+const m3 = migrate(old3);
+assert(m3.chests[0].type === 'common', `旧 normal 箱 -> ${m3.chests[0].type}`);
+assert(m3.chests[0].zh === '普通宝箱', `名称仍正确 (${m3.chests[0].zh})`);
+assert(!!m3.chests[0].icon && !!m3.chests[0].color, 'icon 与 color 已补上');
+assert(m3.chests[1].type === 'boss', `boss 箱保持 (${m3.chests[1].type})`);
+assert(m3.chests[2].type === 'common', `未知档位收敛到 common (${m3.chests[2].type})`);
+assert(m3.chests[0].items.length === 1, '箱内物品未被重掷（不改玩家已得收益）');
+assert(!('normal' in m3.chestCd), '旧键 normal 已从 chestCd 移除');
+assert(m3.chestCd.fine === 0, '新键 fine 已补初值 0');
+assert(Object.keys(m3.chestCd).length === 4, `chestCd 覆盖全部 4 档 (${Object.keys(m3.chestCd).join(',')})`);
+
+console.log('\n== 10b. 宝箱稀有度分档 ==');
+assert(loot.CHEST_TIER_ORDER.length === 4, `4 档宝箱 (${loot.CHEST_TIER_ORDER.join(',')})`);
+for (const key of loot.CHEST_TIER_ORDER) {
+  const tier = loot.CHEST_TIERS[key];
+  assert(!!tier.zh && !!tier.icon && !!tier.color, `${tier.zh} 定义完整`);
+}
+// rarityShift 与 rarityReluck 必须随稀有度单调递增，否则「越高档越好」不成立
+for (let i = 1; i < loot.CHEST_TIER_ORDER.length; i++) {
+  const a = loot.CHEST_TIERS[loot.CHEST_TIER_ORDER[i - 1]];
+  const b = loot.CHEST_TIERS[loot.CHEST_TIER_ORDER[i]];
+  assert(b.rarityShift > a.rarityShift, `${a.zh}->${b.zh} rarityShift 递增`);
+  assert(b.rarityReluck >= a.rarityReluck, `${a.zh}->${b.zh} rarityReluck 不减`);
+}
+
+// 实测梯度：每档开 600 箱，统计传说以上占比
+const N = 600;
+const topRarities = ['Legendary', 'Immortal', 'Arcana', 'Beyond', 'Celestial', 'Divine', 'Cosmic'];
+const topRate = {};
+for (const key of loot.CHEST_TIER_ORDER) {
+  let top = 0, total = 0;
+  for (let i = 0; i < N; i++) {
+    const c = loot.rollChest(makeRng(20260101 + i * 7919), key, { stageIndex: 5, difficulty: 'Normal' });
+    total += c.items.length;
+    top += c.items.filter(it => topRarities.includes(it.rarity)).length;
+  }
+  topRate[key] = top / total;
+  assert(total > 0, `${loot.CHEST_TIERS[key].zh} 产出 ${(total / N).toFixed(2)} 件/箱`);
+}
+const rates = loot.CHEST_TIER_ORDER.map(k => topRate[k]);
+let mono = true;
+for (let i = 1; i < rates.length; i++) if (rates[i] <= rates[i - 1]) mono = false;
+assert(mono, `传说以上占比随稀有度递增 (${loot.CHEST_TIER_ORDER.map((k, i) =>
+  loot.CHEST_TIERS[k].zh + ' ' + (rates[i] * 100).toFixed(1) + '%').join(' < ')})`);
+assert(rates[3] / rates[0] >= 1.8, `最高档是最低档的 ${(rates[3] / rates[0]).toFixed(2)} 倍（体感差异明显）`);
+
+// 波次箱分档：只在 common / fine 两档间分流
+const waveSeen = new Set();
+for (let i = 0; i < 300; i++) waveSeen.add(loot.rollWaveChestTier(makeRng(7000 + i * 13)));
+assert(waveSeen.size === 2 && waveSeen.has('common') && waveSeen.has('fine'),
+  `波次箱只在 common/fine 间分流 (${[...waveSeen].join(',')})`);
+// 300 次里 fine 占比应在 30% 上下（配置 WAVE_CHEST_WEIGHTS）
+let fine = 0;
+for (let i = 0; i < 2000; i++) if (loot.rollWaveChestTier(makeRng(9000 + i * 31)) === 'fine') fine++;
+assert(Math.abs(fine / 2000 - 0.30) < 0.04, `fine 档占比 ${(fine / 2000 * 100).toFixed(1)}%（配置 30%）`);
 
 console.log('\n== 11. 数值热改 ==');
 T.setAt('loot.chestChancePerWave', 0.5);

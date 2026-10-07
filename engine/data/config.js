@@ -13,7 +13,8 @@
 
 const CONFIG = {
   // 存档结构版本。改数据结构时 +1，并在 engine/save.js 的 MIGRATIONS 里写迁移函数
-  schemaVersion: 2,
+  // v3: 宝箱分档 normal -> common/fine/boss/actBoss，chestCd 键名随之改变
+  schemaVersion: 3,
 
   combat: {
     tickMs: 1000,            // 服务器模拟步长（毫秒）
@@ -68,8 +69,9 @@ const CONFIG = {
     chestChancePerWave: 0.14,   // 每波清完掉普通宝箱的概率
     bossChestChance: 1.0,       // 关底 Boss 必掉 boss 箱
     actBossChestChance: 1.0,    // Act 尾关掉 actBoss 箱
-    autoOpenBaseSeconds: {      // 自动开箱基础冷却（符文可减少）
-      normal: 300,
+    autoOpenBaseSeconds: {      // 自动开箱基础冷却（符文可减少），键名须与 engine/loot.js 的 CHEST_TIER_ORDER 一致
+      common: 300,
+      fine: 380,
       boss: 600,
       actBoss: 1800
     },

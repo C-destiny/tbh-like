@@ -483,11 +483,17 @@
   };
 
   // ---- 小工具 ----
-  // 稀有度配色：与 engine/data/items.js 的 RARITY_COLOR 保持一致，
-  // 抽成前端常量是为了让 stage.js 不必等 gamedata 到达就能画出掉落预览
+  // 稀有度配色：必须与 engine/data/items.js 的 RARITY_COLOR 完全一致。
+  // 抽成前端常量是为了让 stage.js 不必等 gamedata 到达就能画出掉落预览。
+  //
+  // 原实现只有 6 档，且键名 Epic / Mythic 在引擎里根本不存在
+  // （引擎实际用的是 Immortal / Arcana / Beyond / Celestial / Divine / Cosmic），
+  // 导致战场上 6 档以上的掉落预览全部退回默认灰色 ——
+  // 越稀有的装备反而看不出稀有。键名与数量都要以引擎为准，不要凭印象写。
   const RARITY_COLOR = {
-    Common: '#9aa3b2', Uncommon: '#4caf50', Rare: '#3f8cff',
-    Epic: '#a855f7', Legendary: '#f59e0b', Mythic: '#ef4444'
+    Common: '#9aa3b2', Uncommon: '#4caf50', Rare: '#3f8cff', Legendary: '#a855f7',
+    Immortal: '#f59e0b', Arcana: '#06b6d4', Beyond: '#ef4444', Celestial: '#facc15',
+    Divine: '#f472b6', Cosmic: '#a78bfa'
   };
 
   const SPRITES = {
@@ -539,5 +545,5 @@
   }
 
   global.Stage = Stage;
-  global.StageUtils = { spriteOf, heroSprite, rowZh, shortNum, esc, replay };
+  global.StageUtils = { spriteOf, heroSprite, rowZh, shortNum, esc, replay, RARITY_COLOR };
 })(window);

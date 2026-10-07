@@ -86,7 +86,7 @@ const RUNES = [
     { name: '行囊 II',   cost: 5000,   effects: { bagSlots: 10 } },
     { name: '行囊 III',  cost: 22000,  effects: { bagSlots: 15 } },
     { name: '收藏页',    cost: 60000,  effects: { stashSlots: 20 } },
-    { name: '自动开箱·普',cost: 150000,effects: { autoOpen: 'normal' }, note: '自动开启普通宝箱' },
+    { name: '自动开箱·普',cost: 150000,effects: { autoOpen: 'common' }, note: '自动开启普通与精良宝箱' },
     { name: '自动开箱·首领',cost: 480000,effects:{ autoOpen: 'boss' },  note: '自动开启首领宝箱' },
     { name: '开箱加速',  cost: 1400000,effects: { chestCdPct: 0.25 }, note: '开箱冷却 -25%' },
     { name: '开箱大师',  cost: 4200000,effects: { chestCdPct: 0.35, chestCap: 4 } }

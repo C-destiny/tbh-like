@@ -338,9 +338,21 @@ select, input[type=text], input[type=number] {
 .hero-stats div { background: var(--bg2); border-radius: 5px; padding: 2px 6px; }
 .hero-stats span { color: var(--dim); }
 
+/* ---- 宝箱（背包内） ---- */
+.chest-list { display: flex; flex-direction: column; gap: 6px; }
+.chest-card {
+  display: flex; gap: 10px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line);
+  border-left-width: 3px; border-radius: 7px; padding: 7px 10px;
+}
+.chest-ico { font-size: 26px; line-height: 1; flex: none; }
+.chest-info { flex: 1; min-width: 0; }
+.chest-zh { font-weight: 600; }
+.chest-prevs { display: flex; gap: 3px; margin-top: 3px; }
+.chest-prev { display: inline-flex; opacity: .95; }
+
 /* ---- 物品 ---- */
-.item-list { display: flex; flex-direction: column; gap: 6px; }
-.item {
+.item-list { display: flex; flex-direction: column; gap: 6px; }.item {
   display: flex; gap: 8px; align-items: flex-start;
   background: var(--panel); border: 1px solid var(--line);
   border-left-width: 3px; border-radius: 7px; padding: 6px 9px;

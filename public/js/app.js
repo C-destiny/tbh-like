@@ -287,13 +287,53 @@
   }
 
   // ---- 背包 ----
+  /**
+   * 单个宝箱卡片。稀有度越高配色越暖、图标越华丽。
+   * 箱内装备只显示槽位图标与稀有度配色（服务端只下发这两个字段），
+   * 目的是让玩家在开箱前知道"值不值得点"，不剧透具体属性。
+   * @param {object} c 服务端下发的宝箱展示字段
+   * @returns {string} HTML
+   */
+  function chestCard(c) {
+    const color = c.color || '#9aa3b2';
+    // 配色表从 StageUtils 取（与引擎的 RARITY_COLOR 同源），
+    // 不要在 GearUI 上取 —— 那里没有这个字段，用了会渲染成 undefined 颜色。
+    const RC = StageUtils.RARITY_COLOR;
+    const previews = (c.items || []).map(i => {
+      const rc = RC[i.rarity] || '#9aa3b2';
+      return `<span class="chest-prev" style="color:${rc}" title="${esc(GearUI.SLOT_ZH[i.slot] || i.slot)} · ${esc(i.rarity)}">${
+        GearUI.gearIcon(i.slot, rc, 15)
+      }</span>`;
+    }).join('');
+    return `<div class="chest-card" style="border-color:${color};box-shadow:0 0 12px ${color}33">
+      <div class="chest-ico" style="color:${color}">${c.icon || '📦'}</div>
+      <div class="chest-info">
+        <div class="chest-zh" style="color:${color}">${esc(c.zh)}</div>
+        <div class="tiny muted">${c.itemCount} 件装备 · ${n(c.gold)} 金${
+          c.matCount ? ` · 素材×${c.matCount}` : ''}${c.coinCount ? ` · 纪念币×${c.coinCount}` : ''
+        }</div>
+        ${previews ? `<div class="chest-prevs">${previews}</div>` : ''}
+      </div>
+      <button class="sm good" onclick="App.act('openChest',{uid:'${c.uid}'})">打开</button>
+    </div>`;
+  }
+
   function tabBag() {
     const v = S.view;
-    let h = `<div class="card"><h3>背包 ${v.inventory.length}/${v.bagLimit}</h3>
-      <div class="row">
-        <button class="sm" onclick="App.sellJunk()">炼金最差 10 件</button>
-        ${v.chests.length ? `<button class="sm good" onclick="App.act('openAllChests')">开启 ${v.chests.length} 个宝箱</button>` : '<span class="tiny muted">暂无宝箱</span>'}
-      </div>
+    const chests = v.chests || [];
+    let h = `<div class="card"><h3>宝箱 ${chests.length}</h3>`;
+    if (chests.length) {
+      h += `<div class="chest-list">${chests.map(chestCard).join('')}</div>`;
+      h += `<div class="row" style="margin-top:8px">
+        <button class="sm good" onclick="App.act('openAllChests')">全部打开（${chests.length}）</button>
+        <span class="tiny muted">稀有度越高，箱内装备越好</span></div>`;
+    } else {
+      h += `<div class="tiny muted">暂无宝箱。清完一波怪有概率掉落，关底必掉首领箱。</div>`;
+    }
+    h += `</div>`;
+
+    h += `<div class="card"><h3>背包 ${v.inventory.length}/${v.bagLimit}</h3>
+      <div class="row"><button class="sm" onclick="App.sellJunk()">炼金最差 10 件</button></div>
       <div class="tiny muted" style="margin-top:6px">素材：${Object.entries(v.materials).map(([k, c]) => `${esc(matZh(k))}×${c}`).join('、') || '无'}</div>
       <div class="tiny muted">纪念币：${Object.entries(v.coins).map(([k, c]) => `${esc(coinZh(k))}×${c}`).join('、') || '无'}</div>
       </div>`;

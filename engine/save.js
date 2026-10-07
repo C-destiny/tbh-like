@@ -8,6 +8,7 @@
  */
 
 const { uid } = require('./util');
+const { CHEST_TIERS, CHEST_TIER_ORDER } = require('./loot');
 const { CLASSES, CLASS_ORDER } = require('./data/classes');
 const T = require('./tunables');
 
@@ -83,7 +84,7 @@ function createNewSave(opts = {}) {
     running: false,
 
     chests: [],            // 未开启的宝箱
-    chestCd: { normal: 0, boss: 0, actBoss: 0 },
+    chestCd: { common: 0, fine: 0, boss: 0, actBoss: 0 },
 
     cube: { level: 1, xp: 0 },
 
@@ -123,6 +124,37 @@ const MIGRATIONS = {
       for (const it of (list || [])) if (it) it.classId = normalizeClassId(it.classId);
     }
     return s;
+  },
+
+  /**
+   * v2 -> v3：宝箱从 3 档（normal/boss/actBoss）扩到 4 档，
+   * 键名 normal 改为 common，并新增 fine（精良）档。参见 engine/loot.js 的 CHEST_TIERS。
+   *
+   * 要迁两处，缺一不可：
+   *   1. 背包里未开启的宝箱：type/zh/icon/color 全部要换成新档位定义。
+   *      只改 type 不改 zh 的话，旧箱会显示成「普通宝箱」但走 fine 档的参数，
+   *      名字与内容对不上。物品内容（items/gold）沿用，不重掷 ——
+   *      重掷等于凭空改玩家已获得的收益。
+   *   2. chestCd 的键名：normal -> common，并补上 fine 的初值。
+   *      漏了的话自动开箱读 st.chestCd.fine 得到 undefined，
+   *      与 0 比较为 false，会在同一次 tick 里连开多个箱。
+   */
+  2: (s) => {
+    for (const c of (s.chests || [])) {
+      if (!c || c.opened) continue;
+      // 旧档 normal -> 新档 common；未知档位一律归到 common，保证不出现孤儿宝箱
+      const key = c.type === 'normal' ? 'common' : (CHEST_TIERS[c.type] ? c.type : 'common');
+      const tier = CHEST_TIERS[key];
+      c.type = key;
+      c.zh = tier.zh;
+      c.icon = tier.icon;
+      c.color = tier.color;
+    }
+
+    // chestCd 重建为全档位齐全的零值，避免残留旧键与缺失新键
+    s.chestCd = {};
+    for (const t of CHEST_TIER_ORDER) s.chestCd[t] = 0;
+    return s;
   }
 };
 
@@ -151,7 +183,12 @@ function fillDefaults(state) {
   state.clearedStages = state.clearedStages || { Normal: {}, Hard: {}, Expert: {}, Hell: {} };
   for (const d of ['Normal', 'Hard', 'Expert', 'Hell']) state.clearedStages[d] = state.clearedStages[d] || {};
   state.currentStage = state.currentStage || { difficulty: 'Normal', id: '1-1' };
-  state.chestCd = state.chestCd || { normal: 0, boss: 0, actBoss: 0 };
+  // chestCd 逐档位补齐：整体 || {} 兜不住「对象存在但缺某个新档位键」的情况。
+  // 缺键时 st.chestCd.fine 为 undefined，与 0 比较为 false，会导致同一次 tick 连开多箱。
+  state.chestCd = state.chestCd || {};
+  for (const t of CHEST_TIER_ORDER) {
+    if (typeof state.chestCd[t] !== 'number') state.chestCd[t] = 0;
+  }
   state.chests = state.chests || [];
   state.cube = state.cube || { level: 1, xp: 0 };
   state.achievements = state.achievements || {};

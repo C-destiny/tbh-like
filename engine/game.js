@@ -98,8 +98,8 @@ class Player {
     const ctx = this.ctx();
     const em = this.eventMul;
 
-    // 宝箱自动开启冷却
-    for (const type of ['normal', 'boss', 'actBoss']) {
+    // 宝箱自动开启冷却。遍历全部档位，新增档位时不必再改这里。
+    for (const type of loot.CHEST_TIER_ORDER) {
       if (st.chestCd[type] > 0) st.chestCd[type] = Math.max(0, st.chestCd[type] - dt);
     }
     if ((ctx.bonuses.autoOpen || []).length) {
@@ -142,7 +142,8 @@ class Player {
       this.grantExp(exp);
     } else if (ev.t === 'waveClear') {
       if (loot.rollWaveChest(this.rng, { bonuses: ctx.bonuses, eventDropMul: em.dropMul })) {
-        this.dropChest('normal');
+        // 波次箱在普通与精良两档间按权重分流（见 loot.js 的 WAVE_CHEST_WEIGHTS）
+        this.dropChest(loot.rollWaveChestTier(this.rng));
       }
     } else if (ev.t === 'cleared') {
       this.dropChest(this.run.isActEnd ? 'actBoss' : 'boss');
@@ -178,10 +179,14 @@ class Player {
     const auto = new Set(ctx.bonuses.autoOpen || []);
     if (!auto.size) return;
     const cfg = T.get();
-    const now = Date.now();
-    for (const type of ['normal', 'boss', 'actBoss']) {
+    // 符文「自动开箱·普」只写了 'common'，但波次箱有 30% 是 'fine' 档
+    // （见 loot.js 的 WAVE_CHEST_WEIGHTS）。若严格按档位匹配，精良箱会漏自动开。
+    // 这里显式声明「common 档符文覆盖波次的两个档位」，而不是改符文数据结构 ——
+    // 后者会牵动存档 schema 与 runes.js 的 aggregate 逻辑，代价远大于收益。
+    if (auto.has('common')) auto.add('fine');
+    for (const type of loot.CHEST_TIER_ORDER) {
       if (!auto.has(type)) continue;
-      const base = cfg.loot.autoOpenBaseSeconds[type] || 300;
+      const base = cfg.loot.autoOpenBaseSeconds[type] ?? cfg.loot.autoOpenBaseSeconds.common;
       const cd = base * (1 - (ctx.bonuses.chestCdPct || 0));
       if (st.chestCd[type] > 0) continue;
       const chest = st.chests.find(c => !c.opened && c.type === type);
@@ -566,7 +571,16 @@ class Player {
       bagLimit: this.bagLimit(),
       materials: st.materials,
       coins: st.coins,
-      chests: st.chests.map(c => ({ uid: c.uid, type: c.type, zh: c.zh })),
+      // 宝箱下发展示字段：前端要画图标、配色与箱内预览。
+      // 与战斗流水里的宝箱预览同原则（见 dropChest）：装备只给槽位与稀有度，
+      // 不下发完整属性，避免前端展示层成为数值泄漏口。
+      chests: st.chests.map(c => ({
+        uid: c.uid, type: c.type, zh: c.zh,
+        icon: c.icon, color: c.color,
+        itemCount: c.items.length, gold: c.gold,
+        matCount: (c.materials || []).length, coinCount: (c.coins || []).length,
+        items: c.items.map(i => ({ slot: i.slot, rarity: i.rarity }))
+      })),
       chestCd: { ...st.chestCd },
 
       // 进度
