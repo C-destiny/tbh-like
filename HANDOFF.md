@@ -5,6 +5,96 @@
 
 ## 1. 已完成内容
 
+### 阶段 4：修复战场人物形象不显示
+
+用户实测反馈：开始挂机后** battlefield 上只有血条，没有人物形象**。
+
+根因：字段名对不上。`public/js/stage.js` 的 `createHero()` 读 `h.sprite` 拼素材路径：
+
+```js
+`<img src="assets/heroes/${h.sprite}_walk_${i}.png" ...>`
+```
+
+但引擎下发的阵容对象（`view.heroes[]`）**根本没有 `sprite` 字段**，只有 `classId`。
+实测引擎输出：
+
+```
+view.heroes[0] 字段: uid / classId / zh / level / xp / xpNext / skillPoints /
+                   skills / row / inParty / equipment / stats
+```
+
+`sprite` 只存在于 `engine/data/classes.js` 的 CLASSES 表里（`sprite: 'niuma'`），
+那属于静态配置表，不随快照下发。于是拼出的路径是
+`assets/heroes/undefined_walk_0.png` —— 4 张图全部 404。
+
+**为什么只剩血条**：血条是 `el.innerHTML` 里的 HTML 元素（`<div class="bar hp">`），
+不依赖图片；`.walk img` 的 CSS 只是 `opacity: 0` 起、由 JS 逐帧切换。
+图片全挂 + 血条不依赖图片 = 只剩一条血，其他什么都没有。
+`image-rendering: pixelated` 之类样式不报错，404 静默失败，所以不显式看网络面板
+根本发现不了。
+
+| 产出 | 路径 | 行为变化 | 验证方式 |
+| --- | --- | --- | --- |
+| 素材名解析函数 | `public/js/stage.js` | 新增 `heroSprite(h)`，取值优先级 `heroSprite > sprite > classId > 'niuma'`。用 `classId` 是因为它是引擎真实下发的字段，且与素材文件名一一对应（`niuma` / `roudan`，两角色 4 帧全部实测存在）。保留 `sprite` 与 `heroSprite` 优先级是为了将来出现「同职业不同形象」时不必改渲染层 | `node scripts/ui-smoke.cjs` 第 11 组 12 项全绿，退出码 0 |
+| 渲染层改用新函数 | `public/js/stage.js` | `createHero()` 由 `h.sprite` 改为 `const sp = heroSprite(h)`。并导出到 `StageUtils` 供测试直接断言 | 同上；浏览器端 `curl /js/stage.js \| grep -c heroSprite` = 6 |
+| 补测试用例 | `scripts/ui-smoke.cjs` | 新增第 11 组 12 项，**夹具刻意不带 `sprite` 字段**（与真实引擎一致），并逐帧核对素材文件真实存在 | 回退修复后 3 项立即 FAIL（见下方「用例有效性验证」），恢复后 12 项全绿 |
+
+**用例有效性验证（本次实际执行）**
+
+新增用例的价值取决于它能否抓住原缺陷，故做了回退对照：
+
+```
+cp public/js/stage.js /tmp/stage-fixed.js
+sed -i 's/const sp = heroSprite(h);/const sp = h.sprite;/' public/js/stage.js
+  -> node scripts/ui-smoke.cjs 第 11 组：
+       OK   只有 classId 时取 classId        （heroSprite 本身仍存在，故仍过）
+       ...
+       FAIL HTML 里不含 undefined 路径
+       FAIL 肾虚牛马 4 帧路径正确
+       FAIL 肉蛋葱击使者 4 帧路径正确
+cp /tmp/stage-fixed.js public/js/stage.js     -> 恢复后 12 项全绿
+```
+
+前 6 项仍过是因为只回退了调用点、未删 `heroSprite` 函数本身，
+说明检测点精确落在「拼路径」这一环，不是泛泛地报「代码改了」。
+
+**为什么旧测试没抓住这个 bug（须记住）**
+
+旧夹具 `scripts/ui-smoke.cjs` 第 132 / 135 行**自己伪造了 `sprite: 'niuma'` 字段**：
+
+```js
+{ uid: 'h1', zh: '肾虚牛马', classId: 'niuma', sprite: 'niuma', ... }
+```
+
+真实引擎不下发 `sprite`。夹具比真实数据「更完整」，于是拼路径这一步永远测不出错。
+这是比缺用例更隐蔽的问题：**夹具与真实数据不一致时，用例是自欺的**。
+新夹具已改为只用真实字段。
+
+**本阶段回归（全部通过）**
+
+```
+node --check 全部 31 个 JS 文件
+  -> check-fail=0
+
+node scripts/ui-smoke.cjs
+  -> 退出码 0，末行「✅ 前端逻辑全部通过」，新增第 11 组 12 项
+
+node scripts/smoke.cjs
+  -> 退出码 0，14 组全绿，末行「完成。」
+
+node scripts/balance.cjs 6
+  -> 退出码 0，与阶段 3 基线 diff -> 无差异，逐字节一致
+  -> 6h 最高 Lv.20 / 通关 19/30 / 击杀 6058 / DPS 2298 / EHP 11441
+
+浏览器端实测（服务器 8787 已在提供修复后的文件）
+  -> curl /js/stage.js | grep -c heroSprite = 6
+  -> curl /assets/heroes/niuma_walk_0.png = HTTP 200，27298 字节
+  -> curl /assets/heroes/roudan_walk_0.png = HTTP 200，23290 字节
+```
+
+**数值影响**：本阶段只改前端素材路径拼接，不触碰任何数值、概率与成长曲线。
+`balance.cjs 6` 与基线逐字节一致。
+
 ### 阶段 3：修复 better-sqlite3 降级失效，服务器在缺编译工具链的机器上可启动
 
 用户换机器（全新 Windows，无 Visual Studio Build Tools）clone 本仓库继续开发。
@@ -424,6 +514,43 @@ TEST_URL=ws://localhost:8899/ws node scripts/e2e.cjs
   判断连的是哪个实例：看服务器启动横幅里的端口，或先 `curl` 目标端口确认。
 - **是否已登记跟踪**：是。待改为默认从 `process.env.PORT` 推导端口，
   消除「两个默认值必须手工保持一致」这个隐式约束。属独立阶段目标。
+
+### 4.14 测试夹具比真实数据「更完整」会让用例自欺
+
+- **复现条件**：在 `scripts/ui-smoke.cjs` 写夹具时，凭印象给对象补上引擎其实不发的字段。
+- **影响范围**：前端测试的可信度。阶段 4 实测踩到：旧夹具给英雄对象写了
+  `sprite: 'niuma'`，而真实引擎只下发 `classId`。`stage.js` 读 `h.sprite` 拼素材路径，
+  这个缺陷在浏览器上表现为「战场只有血条、人物不显示」，
+  但测试里拼出的路径始终是合法的 `niuma_walk_*.png`，**用例永远测不出错**。
+  夹具比真实数据更完整时，测试是自欺的。
+- **规避手段**：写夹具时用引擎真实输出的字段集。可直接从引擎取一份样本核对：
+  ```
+  node -e "const {Player,createNewSave}=require('./engine/game');
+    const p=new Player(createNewSave('t',{seed:20260101}));
+    console.log(Object.keys(p.view().heroes[0]).join(', '))"
+  ```
+  已把 `sprite` 从夹具里去掉（阶段 4 第 11 组）。
+  另：新增用例后必须做一次「回退修复看用例是否 FAIL」的对照，
+  否则无法确定用例是真的有效还是只是恒过。方法见第 1 节阶段 4 的
+  「用例有效性验证」。
+- **是否已登记跟踪**：已修复（阶段 4）。但这是个会复发的写法问题，
+  后续每加新夹具都应核对字段集。
+
+### 4.15 图片 404 在战场上是静默失败
+
+- **复现条件**：素材路径拼错（字段名写错、classId 改名、文件没入库），
+  浏览器加载 `<img>` 失败。
+- **影响范围**：所有用图片的角色/怪物显示。表现为「元素存在但空白」——
+  `.walk` 容器高 96px，血条与名牌照常渲染，只有图不见。
+  本项目中血条不依赖图片，所以「只剩血条」是这类缺陷的典型表征。
+  控制台通常只有一条 404，不主动看网络面板发现不了；
+  `ui-smoke.cjs` 也不校验真实图片加载（见 4.6 与 4.9）。
+- **规避手段**：
+  1. 素材路径一律经具名函数拼接，不在模板字符串里直接取字段（阶段 4 的 `heroSprite`）。
+  2. 用例里逐帧核对文件真实存在（阶段 4 第 11 组已做）。
+  3. 目视验证：改素材相关代码后打开页面确认人物可见
+     （`http://localhost:8787`，需 `Ctrl+F5` 强刷避开缓存）。
+- **是否已登记跟踪**：是。彻底解决需要无头浏览器截图回归（见第 3 节该项）。
 
 ### 4.1 改 `engine/combat.js` 的 snapshot 结构后前端会静默失效
 

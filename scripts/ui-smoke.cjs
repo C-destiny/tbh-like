@@ -277,5 +277,60 @@ try {
   ok(false, '空状态抛错: ' + e.message);
 }
 
+console.log('\n== 11. 人物素材路径（真实引擎字段） ==');
+try {
+  // 背景：本组夹具刻意 **不带 sprite 字段**，与 engine 下发的 view.heroes[] 一致。
+  // 此前夹具自己伪造了 sprite，导致素材路径拼错的问题测不出来：
+  // 浏览器上表现为人物形象不显示、只剩 HTML 血条（血条不依赖图片）。
+  const realView = {
+    running: true,
+    heroes: [
+      // 真实引擎只给这些字段，没有 sprite
+      { uid: 'r1', zh: '肾虚牛马', classId: 'niuma', level: 5, row: 'front', inParty: true,
+        equipment: { weapon: null, helmet: null, armor: null, boots: null, ring: null, amulet: null },
+        stats: { hp: 300, dps: 40, atk: 20, def: 18, crit: 5, critDmg: 1.5, atkSpeed: 0.95, hps: 8, ehp: 400 } },
+      { uid: 'r2', zh: '肉蛋葱击使者', classId: 'roudan', level: 5, row: 'back', inParty: true,
+        equipment: { weapon: null, helmet: null, armor: null, boots: null, ring: null, amulet: null },
+        stats: { hp: 180, dps: 90, atk: 30, def: 9, crit: 8, critDmg: 1.6, atkSpeed: 1.45, hps: 0, ehp: 200 } }
+    ],
+    inventory: []
+  };
+  // heroSprite 的取值优先级：heroSprite > sprite > classId > 'niuma'
+  ok(sandbox.StageUtils.heroSprite({ classId: 'niuma' }) === 'niuma', '只有 classId 时取 classId');
+  ok(sandbox.StageUtils.heroSprite({ classId: 'roudan' }) === 'roudan', '只有 classId 时取 classId（第 2 个角色）');
+  ok(sandbox.StageUtils.heroSprite({ sprite: 'x', classId: 'y' }) === 'x', '同时有 sprite 时优先 sprite');
+  ok(sandbox.StageUtils.heroSprite({ heroSprite: 'z', classId: 'y' }) === 'z', 'heroSprite 字段优先级最高');
+  ok(sandbox.StageUtils.heroSprite({}) === 'niuma', '字段全缺时有兜底，不拼出 undefined');
+  ok(!/undefined/.test(sandbox.StageUtils.heroSprite({})), '兜底值里不含 undefined');
+
+  // 用真实字段同步一次，直接检查 createHero 生成的 HTML。
+  // 不遍历 DOM 子节点：DOM 桩的 innerHTML 存的是字符串，不会真的生成 IMG 元素，
+  // 按 children 去找必然是 0 张，那是测试写法的问题而非渲染的问题。
+  sandbox.Stage.sync(realView, combat);
+  const heroUnits = sandbox.Stage.units
+    ? [...sandbox.Stage.units.values()].filter(u => u.kind === 'hero')
+    : [];
+  ok(heroUnits.length === 2, `战场建出 ${heroUnits.length} 个英雄单位`);
+
+  const allHtml = heroUnits.map(u => u.el.innerHTML || '').join('\n');
+  const allSrc = [...allHtml.matchAll(/src="([^"]+)"/g)].map(m => m[1]);
+  ok(allSrc.length === 8, `两个英雄共 8 张走路图（实际 ${allSrc.length}）`);
+  ok(!/undefined/.test(allHtml), 'HTML 里不含 undefined 路径');
+  ok(allSrc.filter(s => /niuma_walk_\d\.png$/.test(s)).length === 4, '肾虚牛马 4 帧路径正确');
+  ok(allSrc.filter(s => /roudan_walk_\d\.png$/.test(s)).length === 4, '肉蛋葱击使者 4 帧路径正确');
+
+  // 逐帧核对文件真实存在，避免路径写对了但文件没入库
+  const fsx = require('fs');
+  const pth = require('path');
+  const assetDir = pth.join(__dirname, '..', 'public', 'assets', 'heroes');
+  const missing = allSrc.filter(s => !fsx.existsSync(pth.join(assetDir, s.split('/').pop())));
+  ok(missing.length === 0, `引用的 ${allSrc.length} 个素材文件全部存在（缺 ${missing.length} 个）`);
+
+  // 复原夹具状态，避免影响后续用例
+  sandbox.Stage.sync(view, combat);
+} catch (e) {
+  ok(false, '素材路径用例抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
+}
+
 console.log(`\n${fails ? '❌ 失败 ' + fails + ' 项' : '✅ 前端逻辑全部通过'}\n`);
 process.exit(fails ? 1 : 0);

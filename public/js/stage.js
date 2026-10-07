@@ -120,9 +120,11 @@
     createHero(h) {
       const el = document.createElement('div');
       el.className = 'sfx-unit hero-unit';
+      // 素材名走 heroSprite()，不要直接读 h.sprite（见该函数注释）
+      const sp = heroSprite(h);
       el.innerHTML =
         `<div class="walk">${[0, 1, 2, 3].map(i =>
-          `<img src="assets/heroes/${h.sprite}_walk_${i}.png" alt="">`).join('')}</div>` +
+          `<img src="assets/heroes/${sp}_walk_${i}.png" alt="">`).join('')}</div>` +
         `<div class="tag"></div>` +
         `<div class="bar hp"><i></i><span class="label"></span></div>`;
       return {
@@ -496,6 +498,26 @@
     bluegolem: '🧊', titan: '🗿', formless: '🌀'
   };
   function spriteOf(s) { return SPRITES[s] || '👾'; }
+
+  /**
+   * 解析英雄的走路帧图片名（不含目录与扩展名）。
+   *
+   * 背景：引擎下发的阵容对象（view.heroes[]）带的是 classId，
+   * 并没有 sprite 字段 —— sprite 只存在于 engine/data/classes.js 的
+   * CLASSES 表里，且当前恰好与 classId 同名。原实现直接读 h.sprite，
+   * 于是拼出 "assets/heroes/undefined_walk_0.png"，
+   * 4 张图全部 404，浏览器上只剩 HTML 血条（血条不依赖图片，故仍可见）。
+   *
+   * 优先读 classId：它是引擎真实下发的字段，且与素材文件名一一对应
+   * （niuma / roudan）。heroSprite 供未来出现「同职业不同形象」时使用。
+   *
+   * @param {Object} h 引擎下发的英雄对象
+   * @returns {string} 素材名，用于拼 assets/heroes/<name>_walk_<i>.png
+   */
+  function heroSprite(h) {
+    return h.heroSprite || h.sprite || h.classId || 'niuma';
+  }
+
   function rowZh(r) { return { front: '前排', mid: '中排', back: '后排' }[r] || r; }
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
   function clampSpd(v) { return Math.max(0.25, Math.min(3.2, v || 1)); }
@@ -517,5 +539,5 @@
   }
 
   global.Stage = Stage;
-  global.StageUtils = { spriteOf, rowZh, shortNum, esc, replay };
+  global.StageUtils = { spriteOf, heroSprite, rowZh, shortNum, esc, replay };
 })(window);
