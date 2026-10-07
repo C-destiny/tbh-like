@@ -366,6 +366,9 @@ server.listen(PORT, HOST, () => {
   console.log(`  GM 面板: http://localhost:${PORT}/gm.html`);
   // 刻意不打印令牌明文：启动日志常被贴进交接文档或 issue，token 会被带进 git 历史
   console.log(`  GM 令牌: 见 ${SERVER_CFG_PATH}`);
+  // 显式告知存储模式：两种模式功能一致，但存档文件位置不同。
+  // 不提示的话，用户在降级机器上找不到 data/game.db 会以为存档丢了。
+  console.log(`  存储:   ${store.useSqlite ? 'SQLite（data/game.db）' : 'JSON 文件（data/fallback.json）'}`);
   console.log('');
 });
 

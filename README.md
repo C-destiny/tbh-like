@@ -75,12 +75,36 @@ npm start
 
 - **存档不跟着仓库走**。`data/` 整个目录被 gitignore（`game.db` 存玩家存档、
   `server.json` 存 GM 令牌）。新电脑上首次启动会生成一个全新的空存档，
-  GM 令牌也会重新生成。想把老存档带过去，手动复制 `data/game.db` 即可
-  （停服后复制，用 SQLite 工具或直接拷文件都行）。
+  GM 令牌也会重新生成。想把老存档带过去，停服后复制对应的存档文件即可：
+  SQLite 模式复制 `data/game.db`，JSON 模式复制 `data/fallback.json`。
+  两种模式的存档**不能直接互换**，换模式时需要重新开始（见下方「存储模式」）。
 - **服务器地址会变**。启动日志里打印的局域网 IP 是按当前网卡算出来的，换机器必然不同。
 - **依赖只有 2 个**：`ws`（必需）和 `better-sqlite3`（可选，装不上会自动退回 JSON 文件存储，
   功能不变）。所以 `npm install` 在任何 Node 20+ 上都能成功。
-- **素材已入库**，不���再单独处理图片。`npm run assets` 可以在素材更新后重新抠图。
+- **素材已入库**，不需要再单独处理图片。`npm run assets` 可以在素材更新后重新抠图。
+
+### 存储模式：SQLite 与 JSON 文件
+
+启动横幅会打印当前模式：
+
+```
+  存储:   SQLite（data/game.db）
+  存储:   JSON 文件（data/fallback.json）
+```
+
+两种模式**功能完全一致**，区别只在存档文件的位置与格式。
+
+`better-sqlite3` 是原生模块，需要机器上有编译工具链（Windows 上是 Visual Studio Build Tools，
+macOS 上是 Xcode Command Line Tools）。缺工具链时 npm 不会报错——它会跳过构建——
+但模块实际不可用。此时本项目会自动退回 JSON 文件存储，两种功能都正常。
+
+想要 SQLite 存档：
+
+```bash
+npm rebuild better-sqlite3
+```
+
+启动日志里的 `[db]` 行会说明退回原因。设置 `DEBUG_SQLITE=1` 可打印完整原生错误堆栈。
 
 ---
 
@@ -88,7 +112,8 @@ npm start
 
 ### 1. 实时调参
 GM 面板底部「实时调参」列出 **67 个可热改数值**，改完回车立刻对所有在线玩家生效，
-并且存进数据库（`data/game.db` 的 kv 表），重启后依然保留。点 `↺` 恢复单项默认。
+并且存进存档（SQLite 模式是 `data/game.db` 的 kv 表，JSON 模式是 `data/fallback.json` 的 kv 字段），
+重启后依然保留。点 `↺` 恢复单项默认。
 
 覆盖不到的：怪物血量曲线、精英倍率、Boss 倍率、波数 —— 这些也在面板里（"难度曲线"分组）。
 
