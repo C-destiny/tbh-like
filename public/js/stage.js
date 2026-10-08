@@ -15,11 +15,13 @@
   const ENTER_MS = 1100;       // 怪物入场时长
   const LOOT_LIFE_MS = 1100;   // 掉落物在地上停留多久后被「捡走」
 
-  // 宝箱按类型的展示样式：class 决定箱子长相与光效
+  // 文件名与引擎宝箱类型一一对应；旧 normal 只用于兼容迁移前快照。
   const CHEST_STYLE = {
-    normal: { cls: 'chest-normal', label: '宝箱' },
-    boss: { cls: 'chest-boss', label: '首领宝箱' },
-    actBoss: { cls: 'chest-act', label: '幕末宝箱' }
+    normal: { cls: 'chest-normal', label: '宝箱', image: 'chest-common.png' },
+    common: { cls: 'chest-normal', label: '普通宝箱', image: 'chest-common.png' },
+    fine: { cls: 'chest-fine', label: '精良宝箱', image: 'chest-fine.png' },
+    boss: { cls: 'chest-boss', label: '首领宝箱', image: 'chest-boss.png' },
+    actBoss: { cls: 'chest-act', label: '幕末宝箱', image: 'chest-act-boss.png' }
   };
 
   const Stage = {
@@ -59,6 +61,8 @@
       if (!d.view) return;
 
       const running = v.running;
+      // stageId 的首段就是幕号，只影响视觉主题，不参与战斗状态计算。
+      d.view.dataset.act = c?.stageId ? c.stageId.split('-')[0] : '1';
       const waveId = c && running ? `${c.stageId}#${c.wave}` : null;
       if (waveId && waveId !== this.waveKey) {
         const advancing = this.waveKey && this.waveKey.split('#')[0] === waveId.split('#')[0];
@@ -273,20 +277,20 @@
       const g = Math.max(1, Math.round(rec.gold || 0));
       const x = Math.max(28, Math.min(p.x, this.dropBounds().w - 28));
       this.spawnLoot(x, p.y, `
-        <span class="coin-ico">🪙</span>
+        <img class="coin-ico" src="assets/world/drop-coin.png" alt="金币">
         <span class="loot-amt">+${g}</span>`, 'gold');
     },
 
     /** 宝箱掉落：直接画出箱子本体，并按箱内稀有度点亮对应颜色的装备小图标 */
     dropChest(rec) {
-      const st = CHEST_STYLE[rec.chestType] || CHEST_STYLE.normal;
+      const st = CHEST_STYLE[rec.chestType] || CHEST_STYLE.common;
       const p = this.defaultDropPoint();
       const x = Math.max(40, Math.min(p.x, this.dropBounds().w - 40));
       const previews = (rec.items || []).slice(0, 3).map(it =>
         `<span class="chest-prev" style="color:${RARITY_COLOR[it.rarity] || '#9aa3b2'}">${
           GearUI.gearIcon(it.slot, RARITY_COLOR[it.rarity] || '#9aa3b2', 13)}</span>`).join('');
       this.spawnLoot(x, p.y, `
-        <span class="chest-ico ${st.cls}">📦</span>
+        <img class="chest-ico ${st.cls}" src="assets/world/${st.image}" alt="${st.label}">
         <span class="chest-lb">${st.label}${rec.itemCount ? ' · ' + rec.itemCount + ' 件' : ''}</span>
         ${previews ? `<span class="chest-prevs">${previews}</span>` : ''}`, 'chest');
     },
@@ -503,7 +507,17 @@
     ghost: '👻', wraith: '🌫️', darkknight: '⚔️', voidmage: '🧙', abyssbeast: '🦖',
     bluegolem: '🧊', titan: '🗿', formless: '🌀'
   };
-  function spriteOf(s) { return SPRITES[s] || '👾'; }
+  const ACT_ONE_SPRITES = new Set([
+    'slime', 'wolf', 'bandit', 'bat', 'boar', 'skeleton', 'ogre', 'treant'
+  ]);
+
+  /** 第一幕使用正式 PNG，其余幕保留 Emoji，直到对应素材阶段完成。 */
+  function spriteOf(sprite) {
+    if (ACT_ONE_SPRITES.has(sprite)) {
+      return `<img src="assets/world/monster-${sprite}.png" alt="">`;
+    }
+    return SPRITES[sprite] || '👾';
+  }
 
   /**
    * 解析英雄的走路帧图片名（不含目录与扩展名）。

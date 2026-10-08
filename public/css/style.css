@@ -132,6 +132,24 @@ select, input[type=text], input[type=number] {
   overflow: hidden;
   background: linear-gradient(180deg, #10131d 0%, #171b28 42%, #1d2233 68%, #12151f 100%);
 }
+/* 第一幕使用同一组 16px 网格素材，远景与地面保持整数倍像素纹理。 */
+.stage-view[data-act="1"] {
+  background: linear-gradient(180deg, #21364a 0%, #315160 46%, #684739 67%, #241d22 100%);
+}
+.stage-view[data-act="1"] .stage-parallax {
+  background-image:
+    linear-gradient(rgba(15, 32, 36, .28), rgba(15, 32, 36, .28)),
+    url('../assets/world/wall-brick.png');
+  background-size: auto, 64px 64px;
+  opacity: .55;
+}
+.stage-view[data-act="1"] .stage-ground {
+  background-image:
+    url('../assets/world/ground-speckle.png'),
+    url('../assets/world/ground-sand.png');
+  background-size: 64px 64px;
+  border-top-color: #c0784f;
+}
 /* 远景：一层缓慢移动的山影，给"在路上"的感觉 */
 .stage-parallax {
   position: absolute; inset: 0 0 34% 0;
@@ -173,6 +191,11 @@ select, input[type=text], input[type=number] {
 .sfx-unit .bar { height: 7px; margin-top: 3px; }
 .sfx-unit .bar .label { font-size: 9px; line-height: 7px; }
 .sfx-unit .av { font-size: 34px; line-height: 1; display: inline-block; filter: drop-shadow(0 3px 4px rgba(0,0,0,.6)); }
+.sfx-unit .av img {
+  display: block; width: 64px; height: 64px; object-fit: contain;
+  image-rendering: pixelated;
+}
+.sfx-unit.boss .av img { width: 96px; height: 96px; margin-left: -11px; }
 .sfx-unit.boss .av { font-size: 44px; }
 .sfx-unit.boss { filter: drop-shadow(0 0 12px rgba(245,158,11,.45)); }
 .sfx-unit.downed { filter: grayscale(.85) brightness(.6); }
@@ -219,7 +242,8 @@ select, input[type=text], input[type=number] {
   z-index: 5; text-align: center; pointer-events: none;
 }
 .loot .coin-ico {
-  display: block; font-size: 19px; line-height: 1;
+  display: block; width: 32px; height: 32px; margin: 0 auto;
+  image-rendering: pixelated;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,.7));
 }
 .loot .loot-amt {
@@ -229,7 +253,8 @@ select, input[type=text], input[type=number] {
 
 /* 宝箱：本体 + 名称 + 箱内装备预览 */
 .loot .chest-ico {
-  display: block; font-size: 30px; line-height: 1;
+  display: block; width: 48px; height: 48px; margin: 0 auto;
+  image-rendering: pixelated;
   filter: drop-shadow(0 3px 6px rgba(0,0,0,.7));
   animation: chestIdle 1.6s ease-in-out infinite;
 }
@@ -345,7 +370,7 @@ select, input[type=text], input[type=number] {
   background: var(--panel); border: 1px solid var(--line);
   border-left-width: 3px; border-radius: 7px; padding: 7px 10px;
 }
-.chest-ico { font-size: 26px; line-height: 1; flex: none; }
+.chest-ico { width: 48px; height: 48px; object-fit: contain; image-rendering: pixelated; flex: none; }
 .chest-info { flex: 1; min-width: 0; }
 .chest-zh { font-weight: 600; }
 .chest-prevs { display: flex; gap: 3px; margin-top: 3px; }

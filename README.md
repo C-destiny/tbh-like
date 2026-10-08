@@ -50,7 +50,8 @@ GM 令牌: 见 data/server.json
 | `npm run test:ui` | 只跑前端逻辑（`scripts/ui-smoke.cjs`，DOM 桩，不需要浏览器） |
 | `npm run test:e2e` | 端到端测试（**需先 `npm start`**） |
 | `npm run balance -- 6` | 模拟 6 小时挂机，看数值曲线 |
-| `npm run assets` | 重新抠图：原始素材 → `public/assets/heroes/` |
+| `npm run assets` | 重新抠图：原始角色素材 → `public/assets/heroes/` |
+| `node scripts/prep-world-assets.cjs` | 生成第一幕怪物、宝箱、掉落和场景素材 |
 | `npm run reset` | 清空所有玩家存档 |
 | `node scripts/reset.js --all` | 连 GM 令牌、调参、日志一起清空 |
 
@@ -238,13 +239,16 @@ public/          前端（原生 JS，无构建步骤）
   js/net.js      WebSocket 封装
   js/gm.js       GM 控制台
   assets/heroes/ 处理产物：立绘 + 走路 4 帧
+  assets/world/  第一幕怪物、宝箱、掉落和场景产物
 assets-src/heroes/ 角色原始素材（透明图或深色纯底图）
+assets-src/kenney/tiny-dungeon/ 第一幕使用的 CC0 原始图块与许可证
 scripts/         测试与维护脚本
   smoke.cjs      引擎冒烟
   ui-smoke.cjs   前端逻辑（DOM 桩，不需浏览器）
   e2e.cjs        端到端（需先启动服务器）
   balance.cjs    平衡模拟，固定随机种子
   prep-assets.cjs 素材处理：透明检测 → 去背/保留 alpha → 切帧 → 统一画布
+  prep-world-assets.cjs 第一幕素材最近邻整数倍放大
   reset.js       清档
 data/            运行时数据库（game.db）与 GM 令牌（已 gitignore）
 ```

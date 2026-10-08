@@ -306,7 +306,7 @@
       }</span>`;
     }).join('');
     return `<div class="chest-card" style="border-color:${color};box-shadow:0 0 12px ${color}33">
-      <div class="chest-ico" style="color:${color}">${c.icon || '📦'}</div>
+      <img class="chest-ico" src="assets/world/chest-${chestAssetName(c.type)}.png" alt="${esc(c.zh)}">
       <div class="chest-info">
         <div class="chest-zh" style="color:${color}">${esc(c.zh)}</div>
         <div class="tiny muted">${c.itemCount} 件装备 · ${n(c.gold)} 金${
@@ -316,6 +316,12 @@
       </div>
       <button class="sm good" onclick="App.act('openChest',{uid:'${c.uid}'})">打开</button>
     </div>`;
+  }
+
+  // 存档迁移前的 normal 与当前 common 共用同一张普通宝箱图。
+  function chestAssetName(type) {
+    return ({ normal: 'common', common: 'common', fine: 'fine', boss: 'boss', actBoss: 'act-boss' })[type]
+      || 'common';
   }
 
   function tabBag() {

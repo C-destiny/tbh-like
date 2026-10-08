@@ -332,5 +332,24 @@ try {
   ok(false, '素材路径用例抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
 }
 
+console.log('\n== 12. 第一幕世界素材路径 ==');
+try {
+  const sprites = ['slime', 'wolf', 'bandit', 'bat', 'boar', 'skeleton', 'ogre', 'treant'];
+  for (const sprite of sprites) {
+    const html = sandbox.StageUtils.spriteOf(sprite);
+    ok(html.includes(`assets/world/monster-${sprite}.png`), `${sprite} 使用正式 PNG`);
+  }
+  const worldDir = path.join(__dirname, '..', 'public', 'assets', 'world');
+  const expected = [
+    ...sprites.map(sprite => `monster-${sprite}.png`),
+    'chest-common.png', 'chest-fine.png', 'chest-boss.png', 'chest-act-boss.png',
+    'drop-coin.png', 'ground-sand.png', 'ground-speckle.png', 'wall-brick.png'
+  ];
+  const missing = expected.filter(file => !fs.existsSync(path.join(worldDir, file)));
+  ok(missing.length === 0, `16 个第一幕素材文件全部存在（缺 ${missing.length} 个）`);
+} catch (e) {
+  ok(false, '第一幕素材验证抛错: ' + e.message);
+}
+
 console.log(`\n${fails ? '❌ 失败 ' + fails + ' 项' : '✅ 前端逻辑全部通过'}\n`);
 process.exit(fails ? 1 : 0);
