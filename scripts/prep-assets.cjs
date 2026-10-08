@@ -236,6 +236,24 @@ function resize(png, targetH) {
   return out;
 }
 
+/**
+ * 复制一个 RGBA 像素。切帧与画布对齐必须走同一路径，避免其中一处漏复制 alpha 或颜色通道。
+ * @param {PNG} source 源图；不会被修改
+ * @param {PNG} target 目标图；指定像素会被覆盖
+ * @param {number} sourceX 源图横坐标
+ * @param {number} sourceY 源图纵坐标
+ * @param {number} targetX 目标图横坐标
+ * @param {number} targetY 目标图纵坐标
+ */
+function copyPixel(source, target, sourceX, sourceY, targetX, targetY) {
+  const sourceIndex = (sourceY * source.width + sourceX) * 4;
+  const targetIndex = (targetY * target.width + targetX) * 4;
+  target.data[targetIndex] = source.data[sourceIndex];
+  target.data[targetIndex + 1] = source.data[sourceIndex + 1];
+  target.data[targetIndex + 2] = source.data[sourceIndex + 2];
+  target.data[targetIndex + 3] = source.data[sourceIndex + 3];
+}
+
 /** 把横向 sprite sheet 切成 frames 张（只负责切，裁边和对齐交给后面） */
 function sliceSheet(png, frames) {
   const { width: W, height: H } = png;
@@ -245,9 +263,7 @@ function sliceSheet(png, frames) {
     const one = new PNG({ width: fw, height: H });
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < fw; x++) {
-        const si = (y * W + (f * fw + x)) * 4, di = (y * fw + x) * 4;
-        one.data[di] = png.data[si]; one.data[di + 1] = png.data[si + 1];
-        one.data[di + 2] = png.data[si + 2]; one.data[di + 3] = png.data[si + 3];
+        copyPixel(png, one, f * fw + x, y, x, y);
       }
     }
     out.push(one);
@@ -268,9 +284,7 @@ function normalizeFrames(frames) {
     const oy = maxH - p.height;
     for (let y = 0; y < p.height; y++) {
       for (let x = 0; x < p.width; x++) {
-        const si = (y * p.width + x) * 4, di = ((y + oy) * maxW + (x + ox)) * 4;
-        canvas.data[di] = p.data[si]; canvas.data[di + 1] = p.data[si + 1];
-        canvas.data[di + 2] = p.data[si + 2]; canvas.data[di + 3] = p.data[si + 3];
+        copyPixel(p, canvas, x, y, x + ox, y + oy);
       }
     }
     return canvas;
