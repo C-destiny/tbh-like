@@ -5,6 +5,22 @@
 
 ## 1. 已完成内容
 
+### 阶段 11：符文系统 UI 1.0 的 WorkBuddy 实施规范
+
+| 产出 | 路径 | 行为变化 | 验证方式 |
+| --- | --- | --- | --- |
+| 符文改造与图标部署文档 | `docs/rune-system-workbuddy-plan.md` | 明确当前50节点系统的问题、UI 1.0锁定范围、18类图标规范、四种节点状态、文件级任务、三阶段提交、测试与浏览器验收；没有修改任何游戏行为 | `Test-Path docs/rune-system-workbuddy-plan.md` 输出 `True`；人工核对文档引用的 `engine/data/runes.js`、`engine/rune.js`、`public/js/app.js`、`public/css/style.css`、`scripts/smoke.cjs` 与 `scripts/ui-smoke.cjs` 均实际存在 |
+
+本阶段只交付实施文档，不修改符文节点、数值、存档、前端或素材。
+完整回归：`node scripts/smoke.cjs` 退出码 0，符文购买与加成用例通过；
+`node scripts/ui-smoke.cjs` 退出码 0，末行“✅ 前端逻辑全部通过”；端口 8787 的运行实例上执行
+`TEST_URL=ws://localhost:8787/ws node scripts/e2e.cjs`，退出码 0，末行“✅ 全部通过”。
+干净克隆验证：克隆到 `C:/Users/72736/Documents/Codex/tbh-like-clean-f43fcd6`，执行
+`pnpm install --offline --no-frozen-lockfile --ignore-scripts` 成功安装40个包；随后直接执行
+`node scripts/smoke.cjs` 与 `node scripts/ui-smoke.cjs` 均退出码 0，文档存在检查输出 `True`；
+`PORT=8894 node server/index.js` 启动成功，访问 `http://127.0.0.1:8894/` 返回
+`HTTP 200 bytes=3943`。本机无 `npm` 命令，因此使用 pnpm 与等价 Node 入口完成验证。
+
 ### 阶段 10：第一幕怪物、宝箱、掉落与战场场景视觉完整化
 
 | 产出 | 路径 | 行为变化 | 验证方式 |
@@ -616,10 +632,21 @@ node scripts/e2e.cjs
 - **选择理由**：这种边界让换图可重复生成，且不改变服务器协议和存档；否决把整套 Kenney 包复制进
   `public/`，因为会增加无用体积；否决把图片路径写入存档，因为纯视觉替换不应触发 schema 迁移。
 
+### 2.10 符文 UI 与符文经济拆分实施
+
+- **边界划分**：`engine/data/runes.js` 持有节点、依赖、效果和展示元数据；`engine/rune.js` 持有购买判定与加成聚合；
+  规划中的 `public/js/rune-ui.js` 只负责坐标、连线、图标、状态和输入，服务器继续持有金币与已点亮状态。
+- **依赖方向**：保持 `public/ → engine/ → engine/data/`；图标沿用
+  `assets-src/ → scripts/ → public/assets/`，禁止前端定义价格、效果或自行写入购买结果。
+- **选择理由**：先保留50个节点的 ID 与数值完成 UI，可零迁移验证可读性；否决在同一阶段增加第八分支、
+  符文货币或洗点，因为它们会同时影响经济、存档和平衡，无法与视觉问题独立验收。
+
 ## 3. 明确未做的范围
 
 | 排除项 | 排除原因 | 纳入条件 |
 | --- | --- | --- |
+| 立即实现符文 UI | 用户本次要求先形成详细说明与可移交部署文档，未授权直接改动符文系统 | 用户确认由 Codex 实施，或 WorkBuddy 按 `docs/rune-system-workbuddy-plan.md` 完成三个阶段后交回验收 |
+| 符文经济重做 | 新货币、洗点、第八分支、价格和效果调整都会改变数值与存档语义，不应与 UI 1.0 混提 | UI 1.0 实机验收后，先记录多种子平衡基线并单独设计 |
 | 第二、三幕怪物与场景图片 | 本阶段只承诺第一幕完整化；同时替换三幕会扩大选图与浏览器验收范围，难以独立回滚 | 第一幕视觉通过用户验收后，分别作为第二幕与第三幕素材阶段 |
 | 角色专属攻击特效 | 怪物、宝箱与场景是静态资源链路；攻击特效涉及动画时序，不与本阶段混提 | 第一幕静态视觉稳定后，独立实现盾击/扫描光与葱弹投射 |
 | 牛马“工作压力”与肉蛋葱“三段食材连击” | 本阶段目标是验证新版角色视觉，机制会改变战斗数值与快照结构，必须独立记录平衡基线 | 角色视觉验收稳定后，作为独立战斗机制阶段实现 |
