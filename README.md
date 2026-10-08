@@ -237,31 +237,31 @@ public/          前端（原生 JS，无构建步骤）
   js/app.js      页签渲染与指令发送
   js/net.js      WebSocket 封装
   js/gm.js       GM 控制台
-  assets/heroes/ 抠图产物：立绘 + 走路 4 帧
-assets-src/heroes/ 角色原始素材（深色纯底图）
+  assets/heroes/ 处理产物：立绘 + 走路 4 帧
+assets-src/heroes/ 角色原始素材（透明图或深色纯底图）
 scripts/         测试与维护脚本
   smoke.cjs      引擎冒烟
   ui-smoke.cjs   前端逻辑（DOM 桩，不需浏览器）
   e2e.cjs        端到端（需先启动服务器）
   balance.cjs    平衡模拟，固定随机种子
-  prep-assets.cjs 抠图：原图 → 去背 → 切 4 帧 → 统一画布
+  prep-assets.cjs 素材处理：透明检测 → 去背/保留 alpha → 切帧 → 统一画布
   reset.js       清档
 data/            运行时数据库（game.db）与 GM 令牌（已 gitignore）
 ```
 
 ### 4.7 角色素材管线
 
-两个角色的图都来自 `assets-src/heroes/`，各两张：`*_full.png`（全身立绘）与
-`*_walk.png`（走路 4 帧横排）。`npm run assets` 会：
+两个角色的源图都在 `assets-src/heroes/`，每名角色包含全身立绘与走路四帧横排图，
+实际输入路径由 `scripts/prep-assets.cjs` 的 `MANIFEST` 指定。`npm run assets` 会：
 
-1. 边缘 flood fill 去背景，产出透明底 PNG
-2. 把走路表切成 4 张独立帧
-3. 逐帧去残片 + trim + 统一到最大宽高并底对齐（避免播放时人物抖动）
+1. 检测源图透明通道；透明图保留 alpha，纯底图通过边缘 flood fill 去背景
+2. 将精灵表宽度补齐到帧数的整数倍，再切成 4 张独立帧
+3. 逐帧去残片、裁边、统一最大宽高并底对齐，避免动画左右或上下抖动
 
 产物落在 `public/assets/heroes/`，前端直接引用。
 
 **加新角色**需要：往 `engine/data/classes.js` 的 `CLASSES` 加一项、`CLASS_ORDER` 加 id，
-再按上面的命名把两张原图放进 `assets-src/heroes/`，然后跑 `npm run assets`。
+把两张原图放进 `assets-src/heroes/`，在 `MANIFEST` 登记输入和输出，再运行 `npm run assets`。
 抠图阈值很敏感（见 `HANDOFF.md` 第 4 节的已知问题），换素材后务必目视检查全部产物。
 
 ---
@@ -270,7 +270,7 @@ data/            运行时数据库（game.db）与 GM 令牌（已 gitignore）
 
 - **服务器权威**：战斗在服务器算，客户端只渲染。多端看到的状态永远一致，也没法改本地内存作弊
 - **固定步长 tick**：`combat.tickMs = 1000`，断线重连/服务器卡顿会补算（上限 600 步），不同帧率下结果一致
-- **无构建步骤**：没有 webpack/vite，改完 HTML/JS 刷新即可。依赖只有 2 个包
+- **无前端构建步骤**：没有 webpack/vite，改完 HTML/JS 刷新即可；`pngjs` 只用于离线生成素材
 - **SQLite 但可降级**：`better-sqlite3` 装不上时自动退回 JSON 文件存储，功能不变
 - **状态推送**：每 tick 给在线玩家推一次完整快照（约 6 KB），2~3 人毫无压力。
   人多的话改成"只推变化的部分"，入口在 `server/index.js` 的 `pushStates()`

@@ -1,15 +1,15 @@
 /**
  * 角色素材预处理
  * ---------------------------------------------------------------------------
- * 原始素材是深蓝底的 RGB PNG（没有透明通道），不能直接叠到游戏场景上。
- * 这个脚本做三件事：
- *   1. 抠背景 —— 用「从四边向内连通扩散」的方式，只删掉与画面边缘相连的背景色，
- *      角色身上的深色衣服（同样是深蓝）不会被误删
+ * 素材既可能是深蓝底 RGB PNG，也可能是已经带透明通道的新版角色图。
+ * 这个脚本做四件事：
+ *   1. 背景处理 —— RGB 图用边缘连通扩散抠背景；透明 PNG 保留原 alpha，避免误伤黑色描边
  *   2. 降采样 —— 原图 1120x2240 太大，缩到网页合适的尺寸
- *   3. 切帧   —— 走路精灵表 4 帧横排，切成单帧文件，前端好切换
+ *   3. 画布校正 —— 精灵表宽度不能整除帧数时，在右侧补透明像素
+ *   4. 切帧   —— 走路精灵表 4 帧横排，切成单帧文件，前端好切换
  *
  * 重新跑： node scripts/prep-assets.cjs
- * 换素材： 把新图丢进 public/assets/heroes/ 并改下面的 MANIFEST
+ * 换素材： 把新图放进 assets-src/heroes/ 并改下面的 MANIFEST
  */
 
 const fs = require('fs');
@@ -21,10 +21,10 @@ const SRC = path.join(__dirname, '..', 'assets-src', 'heroes');
 
 // 素材清单：输入文件 -> 输出规格
 const MANIFEST = [
-  { src: 'niuma_full.png',  out: 'niuma_full.png',  targetH: 480, kind: 'portrait' },
-  { src: 'roudan_full.png', out: 'roudan_full.png', targetH: 480, kind: 'portrait' },
-  { src: 'niuma_walk.png',  out: 'niuma_walk',      targetH: 200, kind: 'sheet', frames: 4 },
-  { src: 'roudan_walk.png', out: 'roudan_walk',     targetH: 200, kind: 'sheet', frames: 4 }
+  { src: 'candidates/niuma-concept-v2.png',  out: 'niuma_full.png',  targetH: 480, kind: 'portrait' },
+  { src: 'candidates/roudan-concept-v2.png', out: 'roudan_full.png', targetH: 480, kind: 'portrait' },
+  { src: 'candidates/niuma-walk-v2.png',     out: 'niuma_walk',      targetH: 200, kind: 'sheet', frames: 4 },
+  { src: 'candidates/roudan-walk-v3.png',    out: 'roudan_walk',     targetH: 200, kind: 'sheet', frames: 4 }
 ];
 
 // 背景是极纯的深蓝 (0,0,32)，但角色有黑色描边 rgb(0,0,0)（dist≈33）
@@ -254,6 +254,36 @@ function copyPixel(source, target, sourceX, sourceY, targetX, targetY) {
   target.data[targetIndex + 3] = source.data[sourceIndex + 3];
 }
 
+/**
+ * 判断源图是否已经包含透明像素。
+ * @param {PNG} png 待检查的源图
+ * @returns {boolean} 任意像素 alpha 小于 255 时返回 true
+ */
+function hasTransparency(png) {
+  for (let index = 3; index < png.data.length; index += 4) {
+    if (png.data[index] < 255) return true;
+  }
+  return false;
+}
+
+/**
+ * 将精灵表宽度补到帧数的整数倍。只在右侧补透明像素，不移动既有内容，避免改变帧边界。
+ * @param {PNG} png 原始横向精灵表
+ * @param {number} frames 帧数，必须为正整数
+ * @returns {PNG} 宽度已规范化的精灵表；无需补齐时返回原对象
+ */
+function padSheetWidth(png, frames) {
+  const frameWidth = Math.ceil(png.width / frames);
+  const targetWidth = frameWidth * frames;
+  if (targetWidth === png.width) return png;
+
+  const padded = new PNG({ width: targetWidth, height: png.height });
+  for (let y = 0; y < png.height; y++) {
+    for (let x = 0; x < png.width; x++) copyPixel(png, padded, x, y, x, y);
+  }
+  return padded;
+}
+
 /** 把横向 sprite sheet 切成 frames 张（只负责切，裁边和对齐交给后面） */
 function sliceSheet(png, frames) {
   const { width: W, height: H } = png;
@@ -304,12 +334,18 @@ for (const m of MANIFEST) {
   if (!fs.existsSync(src)) { console.log(`  跳过 ${m.src}（assets-src/heroes 下不存在）`); continue; }
 
   let png = PNG.sync.read(fs.readFileSync(src));
-  const { bg, cut } = cutBackground(png);
+  const isTransparentSource = hasTransparency(png);
+  let bg = null;
+  let cut = 0;
+  if (!isTransparentSource) ({ bg, cut } = cutBackground(png));
   const pct = ((cut / (png.width * png.height)) * 100).toFixed(1);
+  const sourceInfo = isTransparentSource
+    ? '保留源图透明通道'
+    : `背景 RGB(${bg.map(v => Math.round(v)).join(',')})  透明化 ${pct}%`;
 
   if (m.kind === 'portrait') {
     const blob = keepLargestBlob(png);
-    console.log(`  ${m.src}  ${png.width}x${png.height}  背景 RGB(${bg.map(v => Math.round(v)).join(',')})  透明化 ${pct}%  残片清除 ${blob.removed}px`);
+    console.log(`  ${m.src}  ${png.width}x${png.height}  ${sourceInfo}  残片清除 ${blob.removed}px`);
     png = trim(png);
     png = resize(png, m.targetH);
     const r = write(m.out, png);
@@ -317,12 +353,15 @@ for (const m of MANIFEST) {
   } else {
     // sprite sheet：先切片，再逐帧去残片+裁边，然后统一画布，最后才缩放
     // （顺序不能乱：先 resize 再对齐会让各帧尺寸不一致，播放时角色会抖）
+    const originalWidth = png.width;
+    png = padSheetWidth(png, m.frames);
     const raw = sliceSheet(png, m.frames).map(f => {
       keepLargestBlob(f);
       return trim(f);
     });
     const frames = normalizeFrames(raw);
-    console.log(`  ${m.src}  ${png.width}x${png.height}  背景 RGB(${bg.map(v => Math.round(v)).join(',')})  透明化 ${pct}%  ${m.frames} 帧`);
+    const paddingInfo = png.width === originalWidth ? '' : `  画布补宽 ${originalWidth}->${png.width}`;
+    console.log(`  ${m.src}  ${originalWidth}x${png.height}  ${sourceInfo}${paddingInfo}  ${m.frames} 帧`);
     frames.forEach((f, i) => {
       const scaled = resize(f, m.targetH);
       const r = write(`${m.out}_${i}.png`, scaled);
