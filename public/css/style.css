@@ -389,17 +389,99 @@ select, input[type=text], input[type=number] {
 
 .grid-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
 
-/* ---- 符文树 ---- */
-.rune-tree { position: relative; height: 460px; background: var(--panel); border-radius: var(--radius); overflow: auto; }
-.rune-node {
-  position: absolute; width: 96px; padding: 4px 5px; border-radius: 7px;
-  background: var(--panel2); border: 1px solid var(--line);
-  font-size: 11px; text-align: center; cursor: pointer;
+/* ---- 符文树（RuneUI 渲染，见 js/rune-ui.js） ---- */
+.rune-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
+.rune-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+.rune-legend .lg { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dim); cursor: help; }
+.rune-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* 画布视口：460px 侧栏装不下 900px 画布，滚动是设计内行为（初始滚动已居中到核心） */
+.rune-tree {
+  width: 100%; height: 440px; overflow: auto;
+  background: var(--panel); border-radius: var(--radius);
 }
-.rune-node.owned { border-color: var(--gold); background: #3a3016; }
-.rune-node.available { border-color: var(--ok); }
-.rune-node.locked { opacity: .45; }
-.rune-node .cost { color: var(--gold); font-size: 10px; }
+.rune-canvas { position: relative; margin: auto; }
+.rune-svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+.rune-edge { stroke-width: 2; stroke-opacity: .3; stroke-linecap: round; }
+
+.rune-node {
+  position: absolute; width: 44px; height: 44px; padding: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel2); border: 2px solid var(--line); cursor: pointer;
+}
+.rune-node .rune-ico { image-rendering: pixelated; pointer-events: none; }
+.rune-node:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.rune-node.is-selected { box-shadow: 0 0 0 2px var(--txt); }
+
+/* 四态：颜色不是唯一信息源 —— owned 有勾、locked 有锁角标、reachable 价格标红 */
+.rune-node.st-owned { border-color: var(--gold); background: var(--bc, #666); }
+.rune-node.st-affordable { border-color: var(--bc, var(--ok)); animation: runeBreathe 2s ease-in-out infinite; }
+.rune-node.st-reachable { border-color: var(--bc, var(--warn)); }
+.rune-node.st-reachable .rune-ico { filter: saturate(.25); opacity: .75; }
+.rune-node.st-locked .rune-ico { filter: grayscale(1); opacity: .4; }
+.rune-node.st-locked { border-color: var(--line); }
+@keyframes runeBreathe {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 10px 2px var(--bc, var(--ok)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rune-node.st-affordable { animation: none; }
+}
+
+.rune-badge {
+  position: absolute; right: -3px; bottom: -3px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--panel); border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1; color: var(--gold);
+}
+/* CSS 画的小挂锁：::before 锁梁 + ::after 锁体，不用 Emoji */
+.rune-badge.lock::before {
+  content: ''; position: absolute; top: -5px; left: 3px;
+  width: 6px; height: 5px; border: 1.5px solid var(--dim);
+  border-bottom: none; border-radius: 3px 3px 0 0;
+}
+.rune-badge.lock::after { content: ''; width: 8px; height: 6px; background: var(--dim); border-radius: 1px; }
+
+/* 详情面板：画布下方（460px 侧栏放不下左右分栏） */
+.rune-detail {
+  margin-top: 8px; padding: 10px; min-height: 150px;
+  background: var(--panel); border-radius: var(--radius); font-size: 13px;
+}
+.rd-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.rd-head img { image-rendering: pixelated; width: 32px; height: 32px; }
+.rd-sec { margin: 6px 0; }
+.rune-cost-bad { color: var(--bad); }
+.rune-buy { min-width: 44px; min-height: 44px; }
+
+/* 小屏分支列表：桌面隐藏，<720px 切换为唯一视图（文档 3.2） */
+.rune-list { display: none; }
+.rune-branch { border: 1px solid var(--line); border-radius: 7px; margin-top: 6px; overflow: hidden; }
+.rune-branch-head {
+  display: flex; width: 100%; align-items: center; gap: 6px; min-height: 44px;
+  padding: 8px 10px; background: var(--panel2); border: none; color: var(--txt); cursor: pointer;
+}
+.rune-branch-head i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.rune-branch-body { padding: 2px 8px; }
+.rune-branch.is-collapsed .rune-branch-body { display: none; }
+.rune-row {
+  display: flex; align-items: center; gap: 8px; min-height: 44px;
+  padding: 4px 2px; cursor: pointer; border-bottom: 1px solid var(--line);
+}
+.rune-row:last-child { border-bottom: none; }
+.rune-row img { image-rendering: pixelated; width: 24px; height: 24px; }
+.rune-row.is-selected { background: var(--panel2); }
+.rune-row.st-locked img { filter: grayscale(1); opacity: .4; }
+.rune-row.st-reachable img { filter: saturate(.25); opacity: .75; }
+.rune-row .rune-row-main { flex: 1; display: flex; flex-direction: column; }
+
+.rune-suggest-wrap { margin-top: 8px; }
+.rune-suggest { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+@media (max-width: 719px) {
+  /* 小屏：树换成分支列表（同一份数据，RuneUI 同时渲染，CSS 决定显示哪套） */
+  .rune-tree { display: none; }
+  .rune-list { display: block; }
+}
 
 /* ---- 关卡 ---- */
 .stage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }

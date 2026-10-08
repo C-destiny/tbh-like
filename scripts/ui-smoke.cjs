@@ -98,13 +98,15 @@ function load(file) {
 console.log('\n== 1. 加载前端脚本 ==');
 try {
   load('public/js/gear-ui.js');
+  load('public/js/rune-ui.js');
   load('public/js/stage.js');
-  ok(true, 'gear-ui.js + stage.js 加载无异常');
+  ok(true, 'gear-ui.js + rune-ui.js + stage.js 加载无异常');
 } catch (e) {
   ok(false, '加载失败: ' + e.message);
   process.exit(1);
 }
 ok(!!sandbox.GearUI, 'GearUI 已挂到 window');
+ok(!!sandbox.RuneUI, 'RuneUI 已挂到 window');
 ok(!!sandbox.Stage, 'Stage 已挂到 window');
 
 console.log('\n== 2. 装备图标生成 ==');
@@ -405,6 +407,62 @@ try {
   ok(missingIcons.length === 0, `节点引用的 ${usedKeys.length} 类图标产物全部存在（缺 ${missingIcons.join(',') || '无'}）`);
 } catch (e) {
   ok(false, '符文元数据用例抛错: ' + e.message);
+}
+
+console.log('\n== 14. 符文树 UI 渲染 ==');
+try {
+  const { RUNES, BRANCHES } = require('../engine/data/runes');
+  // 夹具：war_1 已点亮，金币 1000 → wealth_1(800) 可买、cmd_1(5000) 金币不足、
+  // wealth_2 前置未满足锁定。四种状态在同一棵树里全部出现。
+  const gd = { runes: RUNES, runeBranches: BRANCHES };
+  const view = { runes: { war_1: true }, gold: 1000 };
+  let bought = null;
+  const root = document.createElement('div');
+  sandbox.RuneUI.render(root, { gd, view, act: (name, args) => { bought = { name, args }; } });
+  const html = root.innerHTML;
+
+  // 7. 连接线数量等于全部依赖边数量
+  const edgeCount = RUNES.reduce((a, r) => a + (r.requires || []).length, 0);
+  ok((html.match(/class="rune-edge"/g) || []).length === edgeCount, `连接线数量 = 依赖边数（${edgeCount}）`);
+
+  // 四种状态在同一棵树上可见
+  ok(html.includes('st-owned'), '渲染出 owned 节点（war_1）');
+  ok(html.includes('st-affordable'), '渲染出 affordable 节点（wealth_1，800 ≤ 1000）');
+  ok(html.includes('st-reachable'), '渲染出 reachable 节点（cmd_1，5000 > 1000）');
+  ok(html.includes('st-locked'), '渲染出 locked 节点（wealth_2 前置未满足）');
+
+  // 8. 锁定或金币不足节点不生成可用购买按钮
+  ok(/data-act="buy" data-id="wealth_2"[^>]*disabled/.test(html), '锁定节点的购买按钮禁用');
+  ok(/data-act="buy" data-id="cmd_1"[^>]*disabled/.test(html), '金币不足节点的购买按钮禁用');
+  ok(!/data-act="buy" data-id="wealth_1"[^>]*disabled/.test(html), '可买节点的购买按钮可用');
+
+  // 节点引用图标产物（wealth_1 用 gold 图标）
+  ok(html.includes('assets/runes/rune-gold.png'), '节点 img 指向图标产物');
+
+  // 详情面板默认选中核心节点
+  ok(html.includes('战争符文'), '详情面板默认展示核心节点');
+
+  // 购买走 App.act 委托（服务器权威，前端不自行扣金币）
+  root.onclick({
+    target: { closest: (s) => s === '[data-act="buy"]'
+      ? { dataset: { id: 'wealth_1', act: 'buy' }, disabled: false } : null }
+  });
+  ok(!!bought && bought.name === 'buyRune' && bought.args.runeId === 'wealth_1',
+    '点击购买按钮发起 App.act("buyRune")');
+
+  // 同容器二次渲染 = 增量更新路径，不能抛错、结构仍在
+  // （DOM 桩的 innerHTML 是字符串，子元素原地更新回读不到，视觉断言用下方新容器补）
+  const view2 = { runes: { war_1: true, wealth_1: true }, gold: 100 };
+  sandbox.RuneUI.render(root, { gd, view: view2, act: () => {} });
+  ok(root.innerHTML.includes('rune-edge'), '增量更新（同容器二次渲染）无异常且结构保留');
+
+  // 新状态 + 新容器走 build 路径：状态类与按钮禁用必须随 view 变化
+  const root2 = document.createElement('div');
+  sandbox.RuneUI.render(root2, { gd, view: view2, act: () => {} });
+  ok(/class="rune-row st-owned" data-id="wealth_1"/.test(root2.innerHTML), 'wealth_1 点亮后行状态变 owned');
+  ok(/data-act="buy" data-id="cmd_1"[^>]*disabled/.test(root2.innerHTML), '金币 100 时 cmd_1 购买按钮禁用');
+} catch (e) {
+  ok(false, '符文树 UI 用例抛错: ' + e.message + '\n' + e.stack.split('\n')[1]);
 }
 
 console.log(`\n${fails ? '❌ 失败 ' + fails + ' 项' : '✅ 前端逻辑全部通过'}\n`);

@@ -5,6 +5,28 @@
 
 ## 1. 已完成内容
 
+### 阶段 14：符文树交互界面（提交 C，`docs/rune-system-workbuddy-plan.md` 第 7 节）
+
+| 产出 | 路径 | 行为变化 | 验证方式 |
+| --- | --- | --- | --- |
+| 符文渲染模块 | `public/js/rune-ui.js` | 新增专用渲染模块：坐标计算（900×680 画布、之字偏移防重叠）、SVG 依赖连线（49 条=全部依赖边）、节点四态（owned/affordable/reachable/locked）、详情面板、桌面树+小屏列表双视图；不定义任何价格、效果数值或依赖规则，购买走 `App.act('buyRune')` 服务器权威 | `node --check public/js/rune-ui.js` 退出码 0；实机 50 节点/49 连线渲染正确 |
+| 增量更新 | `public/js/rune-ui.js` | 服务器每秒状态推送只更新类名/角标/按钮禁用态，不重建结构——滚动位置、键盘焦点、选中态不被打断（文档验收清单要求键盘可用） | 实机购买后 2.5s 内节点变 owned、详情变「已点亮」，DOM 结构未重建 |
+| app.js 委托 | `public/js/app.js` | `tabRunes()` 只留容器；`renderTab()` 对符文页保持容器持久 + 委托 `RuneUI.render(...)`；删除旧 `layoutRunes()`（固定坐标+点击即购买） | `node --check public/js/app.js` 退出码 0 |
+| 样式重写 | `public/css/style.css` | 四态配色（分支色实心/呼吸光/描边减饱和/灰度+锁标）、`:focus-visible`、触控目标 ≥44px、`prefers-reduced-motion` 关闭呼吸动画、`<720px` 切分支列表；锁定角标为 CSS 画的挂锁（无 Emoji） | `agent-browser` 实机验收（见下） |
+| UI 冒烟断言 | `scripts/ui-smoke.cjs` | 新增第 14 组：连线数=依赖边数(49)、四态同树可见、锁定/金币不足节点购买按钮禁用、可买节点按钮可用、购买走 `App.act` 委托、增量更新无异常 | `node scripts/ui-smoke.cjs` 退出码 0，末行「✅ 前端逻辑全部通过」 |
+
+**浏览器实机验收（agent-browser + Chrome 155，`http://localhost:8801/`）**：
+50 节点/49 连线渲染正确；新档 0 owned + 49 locked + 1 reachable；点击节点仅选中并展示
+详情（含具体失败原因「金币不足，还差 100」）；挂机至金币 108 后 war_1 变 affordable、
+点亮按钮启用；点击点亮 → 服务器扣费 → 节点变 owned（橙色实心+金环）、六分支首节点变
+reachable（彩色描边）、详情变「已点亮」；换 500×800 视口自动切分支列表（树隐藏、50 行、
+分组折叠头、无横向溢出）；断线重连（令牌重登）后「已点亮 1/50」保持。截图存于
+`.workbuddy/shot-runes-{desktop,detail,owned,mobile}.png`。
+
+完整回归：`node scripts/smoke.cjs` 与 `node scripts/balance.cjs 6` 输出与基线**逐字节一致**；
+`TEST_URL=ws://localhost:8801/ws node scripts/e2e.cjs` 退出码 0，末行「✅ 全部通过」。
+本阶段不改任何数值、存档结构、服务器协议。
+
 ### 阶段 13：符文语义图标素材管线（提交 B，`docs/rune-system-workbuddy-plan.md` 第 7 节）
 
 | 产出 | 路径 | 行为变化 | 验证方式 |
@@ -752,7 +774,7 @@ TEST_URL=ws://localhost:8899/ws node scripts/e2e.cjs
 | CI 自动化 | 当前为单人本地项目，靠 `scripts/` 三个脚本手动回归 | 多人并行开发时接入 |
 | 掉落物被小队「走过去捡」的位移动画 | 本阶段只做了原地弹跳 + 飞向小队左侧的捡取动画。真正让 `heroGroup` 的 `left` 移动到掉落点需要额外的目标点插值，会与波次推进的 `targetLead` 抢同一个位置值 | 掉落物数量与位置需求明确后再做 |
 | 掉落流水落盘 | `run.drops` 只存在运行时，不写入存档。断线重连后当前 run 的历史掉落动画不会补播（收益已入账，不受影响） | 用户要求「回放上一场战斗的掉落」时 |
-| 无头浏览器截图回归 | `agent-browser` 未安装且 `node` 不在 PATH 中，本阶段无法自动截图。视觉验证仍靠人工打开页面 | 装好 `agent-browser` 后把截图比对接进 `scripts/` |
+| 无头浏览器截图回归 | `agent-browser` 已安装（阶段 14 实机验收使用），但截图比对尚未脚本化进 `scripts/`；视觉验证目前是「实机操作 + 截图人工核对」，仍非自动回归 | 把固定操作序列（登录→符文页→截图）写成 `scripts/visual-check.cjs` 并对比基线图 |
 
 **命中规范 4.7 阈值但本阶段未做的重构（技术债登记）**
 
@@ -996,8 +1018,22 @@ TEST_URL=ws://localhost:8899/ws node scripts/e2e.cjs
 
 - **复现条件**：改了 `public/css/style.css` 的 keyframes 后只跑 `ui-smoke.cjs`。
 - **影响范围**：所有视觉表现。脚本用 DOM 桩，`animationend` 不真实触发，动画错位测不出来。
-- **规避手段**：改 CSS 动画后必须打开 `http://localhost:8787` 目视验证至少一个完整的「推进 → 互砍 → 掉落」循环。
-- **已登记跟踪**：是，`agent-browser` 已装好（见 MEMORY.md 环境事实），待接入截图回归。
+- **规避手段**：改 CSS 动画后必须打开游戏页面目视验证至少一个完整的「推进 → 互砍 → 掉落」循环。
+  阶段 14 起 `agent-browser` 已可用（Chrome 155），可实机操作 + 截图核对；
+  自动比对仍未脚本化（见第 3 节排除项）。
+- **已登记跟踪**：是。
+
+### 4.25 `agent-browser` 的 eval 上下文会在两次独立 shell 调用间回到 about:blank
+
+- **复现条件**：用 Bash 分多次调用 `agent-browser eval ...`，前一次还指向游戏页面，
+  下一次 `eval` 就落在 `about:blank`（`document.body.children.length` 为 0、localStorage 报
+  Access denied）。怀疑与沙箱每次调用可能连到不同 daemon 实例有关。
+- **影响范围**：所有浏览器自动化验收流程。element 查找类命令（fill/click）同样受累，
+  报「Element not found」极具误导性——元素在页面上确实存在。
+- **规避手段**：把整个浏览器工作流（open → 登录 → 切页 → eval → 截图）串在
+  **同一条 shell 命令**里用 `&&` 连续执行，中间不换 Bash 调用；单条命令内上下文稳定。
+  会话中断后用 `open + fill 令牌` 重登即可恢复存档（令牌在 `data/fallback.json`）。
+- **已登记跟踪**：是，本条即登记。
 
 ### 4.7 `.gitignore` 的 `data/` 曾把 `engine/data/` 一起排除（已修复，务必记住）
 

@@ -198,9 +198,16 @@
   // ---------------------------------------------------------------------------
   function renderTab() {
     const el = $('tab-content');
+    // 符文页特殊：结构由 RuneUI 持久持有并增量更新。
+    // 若每秒随状态推送整页重建，滚动位置与键盘焦点都会被打断。
+    if (S.tab === 'runes') {
+      let root = $('rune-root');
+      if (!root) { el.innerHTML = tabRunes(); root = $('rune-root'); }
+      RuneUI.render(root, { gd: S.gd, view: S.view, act: (name, args) => App.act(name, args) });
+      return;
+    }
     const f = ({ party: tabParty, bag: tabBag, cube: tabCube, runes: tabRunes, stages: tabStages, pets: tabPets, ach: tabAch })[S.tab];
     el.innerHTML = f ? f() : '';
-    if (S.tab === 'runes') layoutRunes();
   }
 
   // ---- 阵容 ----
@@ -465,44 +472,9 @@
   }
 
   // ---- 符文树 ----
+  // 只准备容器；摘要、树、详情、列表、推荐区全部由 RuneUI 渲染（见 rune-ui.js）
   function tabRunes() {
-    const v = S.view;
-    const owned = Object.values(v.runes).filter(Boolean).length;
-    const cheapest = S.gd.runes.filter(r => !v.runes[r.id] && (r.requires || []).every(x => v.runes[x]))
-      .sort((a, b) => a.cost - b.cost).slice(0, 5);
-    let h = `<div class="card"><h3>符文树 ${owned}/${S.gd.runes.length}</h3>
-      <div class="small muted">最便宜的可买节点：</div><div class="row" style="margin-top:4px">` +
-      cheapest.map(r => `<button class="sm ${v.gold >= r.cost ? 'good' : ''}" onclick="App.act('buyRune',{runeId:'${r.id}'})">${esc(r.name)} · ${n(r.cost)}</button>`).join('')
-      + `</div></div>`;
-    h += `<div class="card" style="padding:6px"><div class="rune-tree" id="rune-tree"></div></div>`;
-    return h;
-  }
-
-  function layoutRunes() {
-    const v = S.view;
-    const tree = $('rune-tree');
-    if (!tree) return;
-    const branches = S.gd.runeBranches;
-    const byBranch = {};
-    for (const r of S.gd.runes) (byBranch[r.branch] = byBranch[r.branch] || []).push(r);
-
-    let html = '';
-    for (const [b, list] of Object.entries(byBranch)) {
-      const cx = b === 'core' ? 400 : 400 + Math.cos((branches[b]?.angle ?? 0) * Math.PI / 180) * 0;
-      list.forEach((r, i) => {
-        const ang = (r.angle ?? 0) * Math.PI / 180;
-        const rad = b === 'core' ? 0 : 60 + i * 62;
-        const x = 400 + Math.cos(ang) * rad - 48;
-        const y = 230 + Math.sin(ang) * rad - 18;
-        const owned = !!v.runes[r.id];
-        const avail = !owned && (r.requires || []).every(x => v.runes[x]);
-        html += `<div class="rune-node ${owned ? 'owned' : avail ? 'available' : 'locked'}"
-          style="left:${x}px;top:${y}px;border-color:${owned ? 'var(--gold)' : avail ? 'var(--ok)' : 'var(--line)'}"
-          onclick="App.act('buyRune',{runeId:'${r.id}'})" title="${esc(r.note || '')}">
-          <div>${esc(r.name)}</div><div class="cost">${n(r.cost)}</div></div>`;
-      });
-    }
-    tree.innerHTML = html;
+    return '<div id="rune-root"></div>';
   }
 
   // ---- 关卡 ----
