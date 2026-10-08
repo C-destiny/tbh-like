@@ -5,6 +5,19 @@
 
 ## 1. 已完成内容
 
+### 阶段 12：符文展示元数据（提交 A，`docs/rune-system-workbuddy-plan.md` 第 7 节）
+
+| 产出 | 路径 | 行为变化 | 验证方式 |
+| --- | --- | --- | --- |
+| 分支展示元数据 | `engine/data/runes.js` | `BRANCHES` 增加 `angle`/`icon`/`description` 纯展示字段；删除 `branchAngle()` 硬编码角度表，改为 `chain()` 直接读 `BRANCHES[branch].angle`；注释“8 个方向”修正为“7 个分支，不存在正西分支” | `node --check engine/data/runes.js` 退出码 0；`node scripts/smoke.cjs` 退出码 0；`node scripts/balance.cjs 6` 退出码 0 |
+| 节点图标键 | `engine/data/runes.js` | 50 个节点按效果语义补 `icon` 字段（18 类复用键），`chain()` 把 `icon` 复制到生成节点；图标键是展示元数据，不参与效果计算 | `node scripts/ui-smoke.cjs` 第 13 组：50 节点 ID 无重复、每节点有图标键、图标键 ≤18 类 |
+| 树视图展示字段 | `engine/rune.js` | `treeView()` 增加 `affordable` 与 `reason` 字段，复用 `canUnlock()` 判定，不复制第二套购买规则；不改变 `aggregate`/`canUnlock`/`unlock` 行为 | `node --check engine/rune.js` 退出码 0；第 13 组断言四种状态（owned/affordable/reachable/locked）均可构造 |
+| UI 冒烟断言 | `scripts/ui-smoke.cjs` | 新增第 13 组：50 节点 ID 无重复、branch 与 icon 存在、requires 指向真实节点、6 条分支首节点依赖 war_1、四态可构造 | `node scripts/ui-smoke.cjs` 退出码 0，末行“✅ 前端逻辑全部通过” |
+
+本阶段只补展示元数据，不改任何 rune ID、价格、效果、依赖或存档结构。
+数值基线：`node scripts/balance.cjs 6` 输出与改动前**逐字节一致**（通关 17/30、最高 Lv.20、DPS 2336、EHP 7564）；
+`node scripts/smoke.cjs` 输出与改动前**逐字节一致**。
+
 ### 阶段 11：符文系统 UI 1.0 的 WorkBuddy 实施规范
 
 | 产出 | 路径 | 行为变化 | 验证方式 |

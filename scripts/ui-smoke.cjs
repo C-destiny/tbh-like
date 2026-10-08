@@ -351,5 +351,55 @@ try {
   ok(false, '第一幕素材验证抛错: ' + e.message);
 }
 
+console.log('\n== 13. 符文树展示元数据 ==');
+try {
+  // 直接 require 引擎数据，验证展示元数据（icon/angle/description）完整且不破坏依赖关系
+  const { RUNES, BRANCHES } = require('../engine/data/runes');
+  const runeMod = require('../engine/rune');
+
+  // 1. 50 个节点 ID 无重复
+  const ids = RUNES.map(r => r.id);
+  ok(new Set(ids).size === ids.length, `50 个节点 ID 无重复（${ids.length} 个）`);
+  ok(ids.length === 50, `节点总数为 50（实际 ${ids.length}）`);
+
+  // 2. 每个节点有存在的分支和图标键
+  const iconKeys = new Set(RUNES.map(r => r.icon));
+  const branchesOk = RUNES.every(r => BRANCHES[r.branch] && BRANCHES[r.branch].zh);
+  ok(branchesOk, '每个节点的 branch 都指向存在的分支');
+  ok(RUNES.every(r => typeof r.icon === 'string' && r.icon.length > 0), '每个节点都有图标键');
+  ok(iconKeys.size <= 18, `图标键复用不超过 18 类（实际 ${iconKeys.size} 类）`);
+
+  // 3. 每个非核心节点的 requires 都指向真实节点
+  const idSet = new Set(ids);
+  const reqOk = RUNES.every(r => (r.requires || []).every(x => idSet.has(x)));
+  ok(reqOk, '所有节点的 requires 都指向真实节点');
+
+  // 4. 每条分支首节点依赖 war_1（核心节点自身除外）
+  const firstRing = RUNES.filter(r => r.ring === 1 && r.branch !== 'core');
+  ok(firstRing.length === 6, `有 6 条非核心分支（实际 ${firstRing.length}）`);
+  ok(firstRing.every(r => (r.requires || []).includes('war_1')), '每条分支首节点依赖 war_1');
+
+  // 5. 四种 UI 状态能够被构造（用树视图判定）
+  //    owned: war_1 已点亮；affordable: 金币充足且前置满足；
+  //    reachable: 前置满足但金币不足；locked: 前置未满足。
+  const stateOwned = { runes: { war_1: true }, gold: 99999999 };
+  const tv1 = runeMod.treeView(stateOwned);
+  ok(tv1.find(r => r.id === 'war_1').owned === true, '构造出 owned 状态');
+  ok(tv1.find(r => r.id === 'wealth_1').affordable === true, '构造出 affordable 状态');
+  ok(tv1.find(r => r.id === 'wealth_1').available === true, '构造出 reachable 前置满足状态');
+
+  const statePoor = { runes: { war_1: true }, gold: 0 };
+  const tv2 = runeMod.treeView(statePoor);
+  const wealth1Poor = tv2.find(r => r.id === 'wealth_1');
+  ok(wealth1Poor.available === true && wealth1Poor.affordable === false, '构造出 reachable(金币不足) 状态');
+
+  const stateLocked = { runes: {}, gold: 99999999 };
+  const tv3 = runeMod.treeView(stateLocked);
+  const wealth1Locked = tv3.find(r => r.id === 'wealth_1');
+  ok(wealth1Locked.available === false && wealth1Locked.affordable === false, '构造出 locked 状态');
+} catch (e) {
+  ok(false, '符文元数据用例抛错: ' + e.message);
+}
+
 console.log(`\n${fails ? '❌ 失败 ' + fails + ' 项' : '✅ 前端逻辑全部通过'}\n`);
 process.exit(fails ? 1 : 0);

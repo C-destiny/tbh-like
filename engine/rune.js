@@ -77,12 +77,21 @@ function cheapestBuyable(state, n = 5) {
 
 /** 给前端画树用：节点 + 状态 */
 function treeView(state) {
-  return RUNES.map(r => ({
-    ...r,
-    owned: !!state.runes?.[r.id],
-    available: !state.runes?.[r.id] && (r.requires || []).every(x => state.runes?.[x]),
-    branchZh: BRANCHES[r.branch]?.zh || r.branch
-  }));
+  return RUNES.map(r => {
+    // 复用 canUnlock 的判定，避免在展示层复制出第二套购买规则：
+    // 已拥有和前置未满足时 reason 就是失败原因；金币不足时 affordable 为 false。
+    const chk = canUnlock(state, r.id);
+    return {
+      ...r,
+      owned: !!state.runes?.[r.id],
+      // 前置已满足（无论金币是否足够）
+      available: !state.runes?.[r.id] && (r.requires || []).every(x => state.runes?.[x]),
+      // 前置已满足且金币足够
+      affordable: chk.ok,
+      reason: state.runes?.[r.id] ? '已点亮' : chk.reason,
+      branchZh: BRANCHES[r.branch]?.zh || r.branch
+    };
+  });
 }
 
 module.exports = { aggregate, canUnlock, unlock, cheapestBuyable, treeView, BONUS_KEYS, BRANCHES };
