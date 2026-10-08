@@ -397,6 +397,12 @@ try {
   const tv3 = runeMod.treeView(stateLocked);
   const wealth1Locked = tv3.find(r => r.id === 'wealth_1');
   ok(wealth1Locked.available === false && wealth1Locked.affordable === false, '构造出 locked 状态');
+
+  // 6. 18 张图标产物全部存在（runes.js 实际用到的键必须都能取到文件）
+  const usedKeys = [...new Set(RUNES.map(r => r.icon))].sort();
+  const missingIcons = usedKeys.filter(k => !fs.existsSync(
+    path.join(__dirname, '..', 'public', 'assets', 'runes', `rune-${k}.png`)));
+  ok(missingIcons.length === 0, `节点引用的 ${usedKeys.length} 类图标产物全部存在（缺 ${missingIcons.join(',') || '无'}）`);
 } catch (e) {
   ok(false, '符文元数据用例抛错: ' + e.message);
 }

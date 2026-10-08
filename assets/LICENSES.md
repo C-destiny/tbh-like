@@ -101,6 +101,7 @@ CC0 的含义：可自由用于个人与商业项目，**无需署名**，可修
 | --- | --- | --- | --- |
 | 双角色立绘与走路图 | `assets-src/heroes/` | 家勋提供 | `niuma_*` / `roudan_*`；抠图产物在 `public/assets/heroes/` |
 | 装备图标 | 无文件 | `public/js/gear-ui.js` 程序化生成 | 内联 SVG，按槽位 + 稀有度配色，非外部素材 |
+| 符文语义图标（18 类） | `public/assets/runes/rune-*.png` | `scripts/prep-rune-assets.cjs` 程序化绘制 | 项目自有素材；源图形以代码定义（无二进制源图），见 `assets-src/runes/README.md`；24×24 基准，运行时 32px + pixelated；中性浅色盘，分支色由 CSS 提供 |
 | 第一幕怪物 | `public/assets/world/monster-*.png` | Kenney Tiny Dungeon | 8 类，源图经最近邻整数倍放大 |
 | 宝箱与金币 | `public/assets/world/chest-*.png`、`drop-coin.png` | Kenney Tiny Dungeon | 4 档宝箱与金币掉落 |
 

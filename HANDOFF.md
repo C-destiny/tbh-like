@@ -5,6 +5,19 @@
 
 ## 1. 已完成内容
 
+### 阶段 13：符文语义图标素材管线（提交 B，`docs/rune-system-workbuddy-plan.md` 第 7 节）
+
+| 产出 | 路径 | 行为变化 | 验证方式 |
+| --- | --- | --- | --- |
+| 图标生成脚本 | `scripts/prep-rune-assets.cjs` | 程序化绘制 18 类语义图标（像素绘图原语：矩形/圆/线/偶奇规则多边形填充 + 自动 1px 描边），输出 `public/assets/runes/rune-<key>.png`；全套统一中性浅色盘（MAIN/DEEP/HI/INK 四色），不烘分支色（文档 5.3：同一图标跨分支复用） | `node --check scripts/prep-rune-assets.cjs` 退出码 0；`node scripts/prep-rune-assets.cjs` 退出码 0 生成 18 张 24×24 PNG；重复执行产物逐字节一致 |
+| 图标产物 | `public/assets/runes/rune-*.png` | 18 张 24×24 透明底 PNG；34px 内主体、≥2px 安全边距、统一描边与左上高光 | 4 倍放大拼图人工目检：18 类轮廓在 32px 显示尺寸下可互相区分（攻击=竖剑、防御=盾、生命=十字、金币=双圈圆、宝箱=箱体、经验=书） |
+| 源素材说明 | `assets-src/runes/README.md` | 说明本目录无二进制源图，源图形以代码定义在生成脚本中；修改图标须改脚本重跑，禁止手工覆盖产物 | 文件存在；与 AGENTS.md 2.2.6 目录约定一致 |
+| 许可登记 | `assets/LICENSES.md` | 「项目自有素材」表新增符文语义图标条目：程序化绘制、无第三方来源、24×24 基准 | 人工核对表格含路径、来源、规格三要素 |
+| UI 冒烟断言 | `scripts/ui-smoke.cjs` | 第 13 组追加断言：节点引用的全部图标键（实际 18 类）在 `public/assets/runes/` 都有对应产物 | `node scripts/ui-smoke.cjs` 退出码 0，末行“✅ 前端逻辑全部通过” |
+
+本阶段只新增素材产物与生成脚本，不改任何游戏代码、数值或存档。
+数值基线：`node scripts/smoke.cjs` 输出与阶段 12 基线**逐字节一致**。
+
 ### 阶段 12：符文展示元数据（提交 A，`docs/rune-system-workbuddy-plan.md` 第 7 节）
 
 | 产出 | 路径 | 行为变化 | 验证方式 |
