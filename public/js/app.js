@@ -11,7 +11,8 @@
     pid: localStorage.getItem('tbh_pid') || '',
     connected: false,
     cubeSel: [],       // 魔方已选中的装备
-    craftOpts: { slot: '', ilvl: 30 }
+    craftOpts: { slot: '', ilvl: 30 },
+    leaderboard: [], leaderboardUpdatedAt: 0, rankSort: 'progress'
   };
 
   const $ = (id) => document.getElementById(id);
@@ -105,6 +106,11 @@
       (m.worldEvents || []).forEach(e => toast(`世界事件：${e.label}`, 'good'));
     });
     Net.on('state', (m) => { S.view = m.view; renderAll(); });
+    Net.on('leaderboard', (m) => {
+      S.leaderboard = m.rows || [];
+      S.leaderboardUpdatedAt = m.updatedAt || Date.now();
+      if (S.tab === 'leaderboard') renderTab();
+    });
     Net.on('event', (m) => onGameEvent(m.ev));
     Net.on('announce', (m) => toast(m.text, 'warn'));
     Net.on('worldEvent', (m) => {
@@ -206,7 +212,10 @@
       RuneUI.render(root, { gd: S.gd, view: S.view, act: (name, args) => App.act(name, args) });
       return;
     }
-    const f = ({ party: tabParty, bag: tabBag, cube: tabCube, runes: tabRunes, stages: tabStages, pets: tabPets, ach: tabAch })[S.tab];
+    const f = ({
+      party: tabParty, bag: tabBag, cube: tabCube, runes: tabRunes,
+      stages: tabStages, pets: tabPets, ach: tabAch, leaderboard: tabLeaderboard
+    })[S.tab];
     el.innerHTML = f ? f() : '';
   }
 
@@ -477,6 +486,13 @@
     return '<div id="rune-root"></div>';
   }
 
+  // ---- 排行榜 ----
+  function tabLeaderboard() {
+    return LeaderboardUI.render(S.leaderboard, {
+      sortKey: S.rankSort, selfId: S.pid, updatedAt: S.leaderboardUpdatedAt
+    });
+  }
+
   // ---- 关卡 ----
   function tabStages() {
     const v = S.view;
@@ -547,6 +563,7 @@
     setRow(uid, row) { Net.act('setRow', { heroUid: uid, row }); },
     setStage(id) { Net.act('setStage', { id }); },
     claimOffline() { Net.act('claimOffline'); },
+    setRankSort(sortKey) { S.rankSort = sortKey; renderTab(); },
 
     equipTo(itemUid) {
       const v = S.view;

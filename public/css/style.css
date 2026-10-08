@@ -483,6 +483,30 @@ select, input[type=text], input[type=number] {
   .rune-list { display: block; }
 }
 
+/* ---- 排行榜 ---- */
+.leaderboard-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.leaderboard-head h3 { margin-bottom: 3px; }
+.rank-sorts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.leaderboard-wrap { overflow-x: auto; padding: 0; }
+.leaderboard-table { min-width: 760px; }
+.leaderboard-table tr.is-self { background: rgba(245, 158, 11, .12); }
+.online-dot {
+  display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; background: var(--dim);
+}
+.online-dot.is-online { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.rank-no {
+  display: inline-flex; width: 24px; height: 24px; align-items: center;
+  justify-content: center; border-radius: 6px;
+}
+.rank-1 { color: #1a1404; background: #f3c94d; }
+.rank-2 { color: #15171c; background: #bfc7d5; }
+.rank-3 { color: #24130b; background: #c9824f; }
+.self-tag {
+  margin-left: 5px; padding: 1px 4px; color: var(--gold);
+  border: 1px solid var(--gold); border-radius: 4px;
+}
+
 /* ---- 关卡 ---- */
 .stage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
 .stage-cell {

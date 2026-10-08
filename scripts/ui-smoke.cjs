@@ -99,6 +99,7 @@ console.log('\n== 1. 加载前端脚本 ==');
 try {
   load('public/js/gear-ui.js');
   load('public/js/rune-ui.js');
+  load('public/js/leaderboard-ui.js');
   load('public/js/stage.js');
   ok(true, 'gear-ui.js + rune-ui.js + stage.js 加载无异常');
 } catch (e) {
@@ -107,7 +108,19 @@ try {
 }
 ok(!!sandbox.GearUI, 'GearUI 已挂到 window');
 ok(!!sandbox.RuneUI, 'RuneUI 已挂到 window');
+ok(!!sandbox.LeaderboardUI, 'LeaderboardUI 已挂到 window');
 ok(!!sandbox.Stage, 'Stage 已挂到 window');
+
+console.log('\n== 1b. 排行榜渲染 ==');
+const rankHtml = sandbox.LeaderboardUI.render([
+  { id: 'a', name: '<甲>', online: true, progress: 'Normal 1-2', progressScore: 2,
+    cleared: 2, level: 3, dps: 120, ehp: 500, kills: 9, gold: 80, runes: 1 },
+  { id: 'b', name: '乙', online: false, progress: 'Normal 1-1', progressScore: 1,
+    cleared: 1, level: 2, dps: 90, ehp: 400, kills: 4, gold: 30, runes: 0 }
+], { sortKey: 'progress', selfId: 'a', updatedAt: 1 });
+ok(rankHtml.indexOf('&lt;甲&gt;') >= 0, '玩家名称会转义');
+ok(rankHtml.indexOf('is-self') >= 0 && rankHtml.indexOf('is-online') >= 0, '自己与在线状态可见');
+ok(rankHtml.indexOf('Normal 1-2') < rankHtml.indexOf('Normal 1-1'), '默认按最高进度排序');
 
 console.log('\n== 2. 装备图标生成 ==');
 const SLOTS = ['weapon', 'helmet', 'armor', 'boots', 'ring', 'amulet'];

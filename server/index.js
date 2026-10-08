@@ -14,6 +14,7 @@ const { URL } = require('url');
 
 const { Store, DATA_DIR } = require('./db');
 const gm = require('./gm');
+const { buildLeaderboard } = require('./leaderboard');
 const T = require('../engine/tunables');
 const { Player, createNewSave } = require('../engine/game');
 const { migrate } = require('../engine/save');
@@ -169,6 +170,12 @@ function pushStates() {
     if (!socketsOf(id).size) continue;   // 没人在线就不推
     p.state.lastSeenAt = Date.now();
     sendTo(id, { type: 'state', view: p.view() });
+  }
+  // 玩家只接收公开汇总；榜单与状态同 tick 推送，在线标记不会滞后。
+  const leaderboard = buildLeaderboard(players.values(), id => socketsOf(id).size > 0);
+  const leaderboardData = JSON.stringify({ type: 'leaderboard', rows: leaderboard, updatedAt: Date.now() });
+  for (const set of sockets.values()) {
+    for (const ws of set) if (ws.readyState === 1) ws.send(leaderboardData);
   }
   // GM 面板的在线概览
   if (gmSockets.size) {

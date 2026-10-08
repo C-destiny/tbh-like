@@ -49,6 +49,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let st = await wait(pws, 'state');
   assert(st.view.heroes.length === 1, '初始 1 名英雄');
   assert(st.view.gold === 0, '初始金币 0');
+  const leaderboard = await wait(pws, 'leaderboard');
+  const ownRank = leaderboard.rows.find(row => row.id === welcome.pid);
+  assert(!!ownRank, '排行榜包含当前玩家');
+  assert(ownRank.online === true, '排行榜实时显示在线状态');
+  assert(!JSON.stringify(leaderboard).includes(welcome.token), '排行榜不泄露玩家令牌');
+  assert(leaderboard.rows.every(row => Number.isFinite(row.dps) && Number.isFinite(row.progressScore)),
+    '排行榜下发可排序的进度与战力数据');
 
   // 开始挂机
   const r1 = await ask(pws, { type: 'act', name: 'start' }, 'actResult');
