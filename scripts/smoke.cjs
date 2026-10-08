@@ -9,13 +9,16 @@ const loot = require('../engine/loot');
 const { makeRng } = require('../engine/util');
 const T = require('../engine/tunables');
 
+// 冒烟测试必须固定随机流，否则同一份代码的宝箱、金币和装备结果也会漂移，无法作为回归基线。
+const SMOKE_SEED = 20260101;
+
 function assert(cond, label) {
   console.log((cond ? '  OK   ' : '  FAIL ') + label);
   if (!cond) process.exitCode = 1;
 }
 
 console.log('\n== 1. 创建存档 ==');
-const st = createNewSave({ name: '测试者', classId: 'niuma' });
+const st = createNewSave({ name: '测试者', classId: 'niuma', seed: SMOKE_SEED });
 let p = new Player(st);
 assert(!!st.token, '生成 token');
 assert(st.heroes.length === 1, '初始 1 名英雄');
@@ -202,7 +205,7 @@ for (const d of ['Normal', 'Hard', 'Expert', 'Hell']) {
 console.log('\n== 14. 掉落流水（前端战场要靠它画真实掉落）==');
 {
   // 用独立存档，避免受上面 120 秒推进与手动 dropChest 的干扰
-  const st2 = createNewSave({ name: '掉落测试', classId: 'roudan' });
+  const st2 = createNewSave({ name: '掉落测试', classId: 'roudan', seed: SMOKE_SEED });
   const p2 = new Player(st2);
   p2.act('start');
   for (let i = 0; i < 90; i++) p2.tick(1);
