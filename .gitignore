@@ -10,6 +10,12 @@ node_modules/
 # 素材原图与抠图产物都入库：assets-src/ 是抠图输入，
 # public/assets/heroes/ 是产物，别人 clone 后能直接跑 npm run assets 重现。
 
+# 网页快捷方式与下载残留的压缩包不入库：
+# 包内自带的 Visit Kenney / Visit Patreon 是 Windows 专属快捷方式，无内容价值；
+# kenney.zip 是下载残留，与解压后的源图完全重复。
+*.url
+assets-src/kenney.zip
+
 # 工具与运行时杂项
 .workbuddy/
 *.log

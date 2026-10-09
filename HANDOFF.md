@@ -5,6 +5,17 @@
 
 ## 1. 已完成内容
 
+### 阶段 16：Kenney 素材源图全部入库 + SSH 推送通道准备
+
+| 产出文件路径 | 行为变化 | 验证方式 |
+| --- | --- | --- |
+| `assets-src/kenney/`（603 个文件：585 PNG + 18 文本） | 四包 Kenney 素材的剩余源图纳入版本控制。此前仅 16 个文件入库，游戏用到的怪物、宝箱、地表与装饰图块源图处于未跟踪状态，别人 clone 后无法用 `npm run assets` 重现产物，违背 `.gitignore` 里既定的素材入库约定 | `git status --porcelain`：未跟踪项清零 |
+| `.gitignore` | 新增两条忽略规则：`*.url`（包内自带 Visit Kenney / Visit Patreon 快捷方式，Windows 专属且无内容价值）、`assets-src/kenney.zip`（下载残留，与解压后源图完全重复） | `git check-ignore -v`：两条均命中 |
+| `~/.ssh/id_ed25519(.pub)` | 新生成 ed25519 密钥对，私钥不上网、不外传。用于替代走不通的 HTTPS 凭据通道 | `ssh -T git@github.com` 返回 `Permission denied (publickey)`，证明 22 端口可达、仅缺公钥登记 |
+
+提交 `c6b97e8`。含素材入库，不含任何游戏数值与代码改动。
+验证：`node scripts/smoke.cjs` 退出码 0 且输出与基线逐字节一致；`node scripts/ui-smoke.cjs` 前端逻辑全部通过。
+
 ### 阶段 15：全服实时排行榜
 
 | 产出文件路径 | 行为变化 | 验证方式 |
